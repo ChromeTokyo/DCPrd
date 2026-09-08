@@ -3,7 +3,7 @@
 {%- endmacro %}
 
 {% macro kind_tag(kind) -%}
-{% if kind == 'compound' %}<span class="tag tag-kind">复合</span>{% else %}<span class="tag tag-kind tag-single">单体</span>{% endif %}
+{% if kind == 'compound' %}<span class="tag tag-kind">复合</span>{% endif %}
 {%- endmacro %}
 
 {% macro tag_chip(t, href=None) -%}

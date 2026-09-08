@@ -34,7 +34,7 @@
   {% for it in items %}
   {% set r = it.req %}
   <tr>
-    <td class="name">{{ project_tag(r.project) }} <a href="/req/{{ r.id }}">{{ r.name }}</a> {{ kind_tag(r.kind) }}{% if r.kind == 'compound' %} <span class="muted small">{{ r.doc_count }} 份子文档</span>{% endif %}{% if it.tags %}<div class="chips">{% for t in it.tags %}{{ tag_chip(t, '/?project=' ~ project ~ '&tag=' ~ t.id) }}{% endfor %}</div>{% endif %}</td>
+    <td class="name">{{ project_tag(r.project) }} <a href="/req/{{ r.id }}">{{ r.name }}</a> {% for t in it.tags %}{{ tag_chip(t, '/?project=' ~ project ~ '&tag=' ~ t.id) }} {% endfor %}{{ kind_tag(r.kind) }}{% if r.kind == 'compound' %} <span class="muted small">{{ r.doc_count }} 份子文档</span>{% endif %}</td>
     <td class="jira-cell">{{ jira_links(r.jira_keys, jira_base_url) }}</td>
     <td>{{ r.owner_names or '' }}</td>
     <td class="latest">{% if it.latest %}v{{ it.latest.number }}{% if r.kind == 'compound' %} <span class="muted">{{ it.latest.doc_name }}</span>{% endif %} · {{ it.latest.uploader_name or '（已删除用户）' }} · {{ fmt_dt(it.latest.uploaded_at) }}{% else %}<span class="muted">暂无</span>{% endif %}</td>
