@@ -68,14 +68,14 @@ def test_nested_entry_redirect(superuser):
     code = share_code_of(superuser.get(f"/req/{rid}").text)
     r = superuser.get(f"/s/{code}/", follow_redirects=False)
     assert r.status_code == 302 and r.headers["location"] == f"/s/{code}/proto/index.html"
-    assert superuser.get(f"/s/{code}/proto/index.html").text == "deep"
+    assert superuser.get(f"/s/{code}/proto/index.html").text.startswith("deep")
 
 
 def test_sandbox_toggle(superuser):
     csrf = csrf_of(superuser)
     rid = create_single(superuser, csrf, "S", file=html_file("s.html", "s"))
     code = share_code_of(superuser.get(f"/req/{rid}").text)
-    r = superuser.post("/admin/settings", data={"csrf": csrf, "site_name": "X", "jira_base_url": "https://j", "timezone": "Asia/Shanghai", "max_upload_mb": "10"}, follow_redirects=False)
+    r = superuser.post("/admin/settings", data={"csrf": csrf, "site_name": "X", "jira_base_url": "https://j", "timezone": "Asia/Shanghai", "max_upload_mb": "10", "public_widget_enabled": "1"}, follow_redirects=False)
     assert r.status_code == 303
     assert "content-security-policy" not in superuser.get(f"/s/{code}/").headers
     assert "update_settings" in superuser.get("/admin/audit").text
@@ -203,3 +203,41 @@ def test_tags_admin_defines_users_attach(superuser, client_factory):
     superuser.post(f"/admin/tags/{ids['已评审']}/delete", data={"csrf": csrf}, follow_redirects=False)
     assert "评审通过" not in li.get(f"/req/{rid}").text and "评审通过" not in li.get("/").text
     assert "delete_tag" in superuser.get("/admin/audit").text
+
+
+def test_public_widget_on_entry_only(superuser):
+    csrf = csrf_of(superuser)
+    uid = re.search(r'name="owners" value="(\d+)"', superuser.get("/req/new").text).group(1)
+    z = make_zip({"index.html": "<html><head><meta charset='gbk'></head><body><img src='img/a.png'><a href='sub.html'>x</a></body></html>".encode("gbk"), "sub.html": "<html><body>sub</body></html>", "img/a.png": b"png"})
+    r = superuser.post("/req/new", data={"csrf": csrf, "project": "im", "kind": "single", "name": "带菜单需求", "jira_keys": "DC-77", "owners": uid}, files={"file": ("w.zip", z, "application/zip")}, follow_redirects=False)
+    rid = int(re.search(r"/req/(\d+)", r.headers["location"]).group(1))
+    superuser.post(f"/doc/{doc_id_of(superuser, rid)}/upload", data={"csrf": csrf, "note": "第二版"}, files={"file": html_file("v2.html", "v2")}, follow_redirects=False)
+    code = share_code_of(superuser.get(f"/req/{rid}").text)
+    # 最新版入口：有小菜单，数据含需求名/负责人/Jira/版本
+    r = superuser.get(f"/s/{code}/")
+    assert r.status_code == 200 and "dcpm-widget" in r.text
+    data = re.search(r"var D = (\{.*?\});\n", r.text).group(1)
+    import json
+    d = json.loads(data)
+    assert d["req"]["name"] == "带菜单需求" and d["req"]["owners"] == ["Super"] and d["req"]["jira"][0]["key"] == "DC-77"
+    assert d["current"] == 2 and d["latest"] == 2 and [v["n"] for v in d["versions"]] == [2, 1] and d["versions"][0]["note"] == "第二版"
+    assert d["doc"]["dirUrl"] is None
+    # 历史版本入口：gbk 页面注入后仍可按 gbk 解码，且标记为历史
+    r = superuser.get(f"/v/{code}/1/")
+    assert r.headers["content-type"] == "text/html; charset=gbk"
+    body = r.content.decode("gbk")
+    assert "dcpm-widget" in body and '"current": 1' in body and '"latest": 2' in body
+    assert body.rstrip().endswith("</html>") and body.count("</body>") == 1
+    # 非入口资源不注入
+    assert "dcpm-widget" not in superuser.get(f"/v/{code}/1/sub.html").text
+    assert superuser.get(f"/v/{code}/1/img/a.png").content == b"png"
+    # 复合需求：子文档入口带返回目录
+    superuser.post(f"/req/{rid}/convert", data={"csrf": csrf}, follow_redirects=False)
+    detail = superuser.get(f"/req/{rid}").text
+    dir_code = re.search(r"目录入口页.*?/s/([a-z0-9]{12})/", detail, re.S).group(1)
+    doc_code = re.search(r'/s/([a-z0-9]{12})/">带菜单需求', superuser.get(f"/s/{dir_code}/").text).group(1)
+    d = json.loads(re.search(r"var D = (\{.*?\});\n", superuser.get(f"/s/{doc_code}/").text).group(1))
+    assert d["doc"]["compound"] is True and d["doc"]["dirUrl"] == f"/s/{dir_code}/"
+    # 设置关闭后不注入
+    superuser.post("/admin/settings", data={"csrf": csrf, "site_name": "X", "jira_base_url": "https://j", "timezone": "Asia/Tokyo", "max_upload_mb": "10", "sandbox_enabled": "1"}, follow_redirects=False)
+    assert "dcpm-widget" not in superuser.get(f"/s/{doc_code}/").text

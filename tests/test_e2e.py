@@ -112,6 +112,17 @@ def test_full_flow(browser, live_url):
     assert "第二版" in admin.content() and "v2" in admin.content()
     anon.goto(public1)
     assert anon.locator("#t").inner_text() == "版本二"
+    # 右下角需求信息小菜单：点开后显示需求名、负责人、两个历史版本
+    anon.click("#dcpm-widget-host .pill")
+    panel = anon.locator("#dcpm-widget-host .panel")
+    assert panel.is_visible()
+    txt = panel.inner_text()
+    assert "支付流程改版" in txt and "负责人" in txt and "v2" in txt and "v1" in txt and "DC-85989" in txt
+    assert anon.locator("#dcpm-widget-host .vs li").count() == 2
+    anon.click("#dcpm-widget-host .vs li:has-text('v1') a")
+    anon.wait_for_url(re.compile(r"/v/[a-z0-9]{12}/1/"))
+    assert anon.locator("#t").inner_text() == "版本一"
+    assert "历史版本" in anon.locator("#dcpm-widget-host .pill").inner_text()
     code = re.search(r"/s/([a-z0-9]{12})/", public1).group(1)
     anon.goto(f"{base_url}/v/{code}/1/")
     assert anon.locator("#t").inner_text() == "版本一"

@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from .. import db, queries
+from ..public_widget import inject_widget
+from ..web import PROJECTS, split_jira_keys
 from ..main import get_ctx
 from ..storage import content_file
 from ..web import Ctx
@@ -48,14 +50,50 @@ def _content_type(path: Path) -> str:
     return guess or "application/octet-stream"
 
 
-def _serve(ctx: Ctx, path: Path, cache: str) -> Response:
+def _serve(ctx: Ctx, path: Path, cache: str, widget: dict | None = None) -> Response:
     ctype = _content_type(path)
-    resp = FileResponse(str(path), media_type=ctype)
+    if widget is not None and ctype.startswith("text/html"):
+        body = inject_widget(path.read_bytes(), widget)
+        resp: Response = Response(body, media_type=ctype)
+    else:
+        resp = FileResponse(str(path), media_type=ctype)
     resp.headers["content-type"] = ctype  # 覆盖 Starlette 自动补的 charset
     resp.headers["cache-control"] = cache
     if ctype.startswith("text/html") and ctx.sandbox_enabled:
         resp.headers["content-security-policy"] = SANDBOX_CSP
     return resp
+
+
+def _widget_data(ctx: Ctx, doc, ver) -> dict | None:
+    """入口页小菜单的数据：需求名、负责人、更新时间、历史版本。"""
+    if (ctx.settings.get("public_widget_enabled") or "1") != "1":
+        return None
+    req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ?", (doc["requirement_id"],))
+    if not req:
+        return None
+    owners = [o["name"] for o in queries.owners_of(ctx.conn, req["id"])]
+    versions = [
+        v for v in db.all_rows(
+            ctx.conn,
+            """SELECT v.number, v.uploaded_at, v.note, u.name AS uploader FROM versions v LEFT JOIN users u ON u.id = v.uploaded_by
+               WHERE v.document_id = ? AND v.deleted_at IS NULL AND v.entry_path IS NOT NULL ORDER BY v.number DESC""",
+            (doc["id"],),
+        )
+    ]
+    latest = versions[0]["number"] if versions else ver["number"]
+    jira_base = (ctx.settings.get("jira_base_url") or ctx.cfg.jira_base_url).rstrip("/")
+    return {
+        "req": {
+            "name": req["name"], "project": req["project"], "projectLabel": PROJECTS.get(req["project"], req["project"].upper()),
+            "owners": owners, "jira": [{"key": k, "url": f"{jira_base}/browse/{k}"} for k in split_jira_keys(req["jira_keys"])],
+        },
+        "doc": {"name": doc["name"], "compound": req["kind"] == "compound", "dirUrl": f"/s/{req['share_code']}/" if req["kind"] == "compound" else None},
+        "current": ver["number"],
+        "latest": latest,
+        "latestUrl": f"/s/{doc['share_code']}/",
+        "updated": ctx.fmt_dt(versions[0]["uploaded_at"]) if versions else "",
+        "versions": [{"n": v["number"], "time": ctx.fmt_dt(v["uploaded_at"]), "by": v["uploader"] or "", "note": v["note"] or "", "url": f"/v/{doc['share_code']}/{v['number']}/"} for v in versions],
+    }
 
 
 def _doc_by_code(ctx: Ctx, code: str):
@@ -77,6 +115,7 @@ def _serve_version(ctx: Ctx, doc, ver, rel: str, prefix: str, cache: str) -> Res
         if "/" in entry:
             return RedirectResponse(f"{prefix}{entry}", status_code=302)
         rel = entry
+    widget = _widget_data(ctx, doc, ver) if rel == ver["entry_path"] else None
     path = content_file(ctx.cfg, doc["id"], ver["number"], rel)
     if path is None:
         # 目录访问：尝试 index.html
@@ -84,7 +123,7 @@ def _serve_version(ctx: Ctx, doc, ver, rel: str, prefix: str, cache: str) -> Res
             path = content_file(ctx.cfg, doc["id"], ver["number"], rel + "index.html")
         if path is None:
             raise HTTPException(404, "文件不存在")
-    return _serve(ctx, path, cache)
+    return _serve(ctx, path, cache, widget)
 
 
 @router.get("/s/{code}")

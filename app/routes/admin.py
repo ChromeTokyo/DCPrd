@@ -145,7 +145,8 @@ async def settings_save(request: Request, ctx: Ctx = Depends(get_ctx)):
         ctx.flash("err", "上传上限需为 1～4000 之间的整数（MB）")
         return ctx.redirect("/admin/settings")
     sandbox = "1" if form.get("sandbox_enabled") else "0"
-    new_values = {"site_name": site_name, "jira_base_url": jira, "timezone": tz, "max_upload_mb": str(mb), "sandbox_enabled": sandbox}
+    widget = "1" if form.get("public_widget_enabled") else "0"
+    new_values = {"site_name": site_name, "jira_base_url": jira, "timezone": tz, "max_upload_mb": str(mb), "sandbox_enabled": sandbox, "public_widget_enabled": widget}
     changed = {k: {"from": ctx.settings.get(k), "to": v} for k, v in new_values.items() if ctx.settings.get(k) != v}
     for k, v in new_values.items():
         db.set_setting(ctx.conn, k, v)

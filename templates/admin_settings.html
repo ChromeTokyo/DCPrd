@@ -12,6 +12,10 @@
     <label class="check"><input type="checkbox" name="sandbox_enabled" value="1" {% if settings.sandbox_enabled == '1' %}checked{% endif %}> 文档脚本沙箱</label>
     <span class="hint">开启时公开文档以 CSP sandbox 方式运行，其中的脚本无法冒用浏览者的登录身份；若 Axure 等原型在沙箱下显示异常（多 iframe 互访、localStorage 报错），可关闭，此时依靠 HttpOnly Cookie 与 CSRF Token 兜底。</span>
   </div>
+  <div class="field">
+    <label class="check"><input type="checkbox" name="public_widget_enabled" value="1" {% if (settings.public_widget_enabled or '1') == '1' %}checked{% endif %}> 公开页需求信息小菜单</label>
+    <span class="hint">在分享出去的 HTML 入口页右下角显示需求名称、负责人、更新时间与历史版本切换（复合需求带返回目录）。样式用 Shadow DOM 隔离，不影响文档本身；若与某些原型冲突可关闭。</span>
+  </div>
   <div class="form-actions"><button type="submit" class="btn btn-primary">保存</button></div>
 </form>
 <section class="card">

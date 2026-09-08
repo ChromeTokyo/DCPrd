@@ -117,6 +117,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         "max_upload_mb": str(cfg.max_upload_mb),
         "timezone": cfg.timezone,
         "sandbox_enabled": "1",
+        "public_widget_enabled": "1",
     }
     db.init_db(cfg.db_path, defaults)
 

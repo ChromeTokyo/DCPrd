@@ -203,7 +203,7 @@ def update(conn: sqlite3.Connection, table: str, row_id: int, data: dict[str, An
 
 # ---------- settings ----------
 
-SETTING_KEYS = ("site_name", "jira_base_url", "max_upload_mb", "timezone", "sandbox_enabled")
+SETTING_KEYS = ("site_name", "jira_base_url", "max_upload_mb", "timezone", "sandbox_enabled", "public_widget_enabled")
 
 
 def get_settings(conn: sqlite3.Connection) -> dict[str, str]:
