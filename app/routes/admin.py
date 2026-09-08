@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import db
+from .. import db, queries
 from ..main import get_ctx
 from ..security import new_invite_code
 from ..web import Ctx
@@ -160,3 +160,77 @@ async def audit_page(ctx: Ctx = Depends(get_ctx)):
     ctx.require_admin()
     logs = db.all_rows(ctx.conn, "SELECT * FROM audit_log ORDER BY id DESC LIMIT 500")
     return ctx.render("admin_audit.html", logs=logs)
+
+
+# ---------- 标签管理 ----------
+
+@router.get("/tags")
+async def tags_page(ctx: Ctx = Depends(get_ctx)):
+    ctx.require_admin()
+    tags = db.all_rows(
+        ctx.conn,
+        """SELECT t.*, (SELECT COUNT(*) FROM requirement_tags rt JOIN requirements r ON r.id = rt.requirement_id WHERE rt.tag_id = t.id AND r.deleted_at IS NULL) AS used
+           FROM tags t WHERE t.deleted_at IS NULL ORDER BY t.position, t.name""",
+    )
+    return ctx.render("admin_tags.html", tags=tags, colors=queries.TAG_COLORS)
+
+
+def _tag_fields(form) -> tuple[str, str]:
+    name = str(form.get("name") or "").strip()[:30]
+    color = str(form.get("color") or "gray")
+    if color not in queries.TAG_COLORS:
+        color = "gray"
+    return name, color
+
+
+@router.post("/tags/new")
+async def tags_new(request: Request, ctx: Ctx = Depends(get_ctx)):
+    ctx.require_admin()
+    form = await request.form()
+    ctx.check_csrf(form)
+    name, color = _tag_fields(form)
+    if not name:
+        ctx.flash("err", "请输入标签名称")
+        return ctx.redirect("/admin/tags")
+    if db.one(ctx.conn, "SELECT 1 FROM tags WHERE name = ? AND deleted_at IS NULL", (name,)):
+        ctx.flash("err", f"标签「{name}」已存在")
+        return ctx.redirect("/admin/tags")
+    pos = db.one(ctx.conn, "SELECT COALESCE(MAX(position), 0) + 1 AS p FROM tags")["p"]
+    tid = db.insert(ctx.conn, "tags", {"name": name, "color": color, "position": pos, "created_by": ctx.user["id"], "created_at": db.utcnow()})
+    db.audit(ctx.conn, ctx.user, "create_tag", "tag", tid, {"name": name, "color": color})
+    ctx.flash("ok", f"标签「{name}」已创建")
+    return ctx.redirect("/admin/tags")
+
+
+@router.post("/tags/{tag_id}/edit")
+async def tags_edit(tag_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
+    ctx.require_admin()
+    form = await request.form()
+    ctx.check_csrf(form)
+    tag = db.one(ctx.conn, "SELECT * FROM tags WHERE id = ? AND deleted_at IS NULL", (tag_id,))
+    if not tag:
+        raise HTTPException(404, "标签不存在")
+    name, color = _tag_fields(form)
+    if not name:
+        ctx.flash("err", "标签名称不能为空")
+        return ctx.redirect("/admin/tags")
+    if db.one(ctx.conn, "SELECT 1 FROM tags WHERE name = ? AND id != ? AND deleted_at IS NULL", (name, tag_id)):
+        ctx.flash("err", f"标签「{name}」已存在")
+        return ctx.redirect("/admin/tags")
+    db.update(ctx.conn, "tags", tag_id, {"name": name, "color": color})
+    ctx.flash("ok", "已保存")
+    return ctx.redirect("/admin/tags")
+
+
+@router.post("/tags/{tag_id}/delete")
+async def tags_delete(tag_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
+    ctx.require_admin()
+    form = await request.form()
+    ctx.check_csrf(form)
+    tag = db.one(ctx.conn, "SELECT * FROM tags WHERE id = ? AND deleted_at IS NULL", (tag_id,))
+    if not tag:
+        raise HTTPException(404, "标签不存在")
+    db.update(ctx.conn, "tags", tag_id, {"deleted_at": db.utcnow()})
+    db.audit(ctx.conn, ctx.user, "delete_tag", "tag", tag_id, {"name": tag["name"]})
+    ctx.flash("ok", f"标签「{tag['name']}」已删除（需求上的引用一并移除显示）")
+    return ctx.redirect("/admin/tags")

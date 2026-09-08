@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import project_tag, kind_tag, jira_links, copy_btn, share_box, confirm_form, upload_form, version_table %}
+{% from "_macros.html" import project_tag, kind_tag, jira_links, copy_btn, share_box, confirm_form, upload_form, version_table, tag_chip, tag_picker %}
 {% block title %}{{ req.name }} · {{ site_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,6 +16,17 @@
 <section class="card info">
   <dl>
     <dt>Jira</dt><dd>{% if req.jira_keys %}{{ jira_links(req.jira_keys, jira_base_url) }}{% else %}<span class="muted">—</span>{% endif %}</dd>
+    <dt>标签</dt><dd>
+      <div class="chips inline-chips">{% for t in tags %}{{ tag_chip(t, '/?tag=' ~ t.id) }}{% else %}<span class="muted">—</span>{% endfor %}</div>
+      <details class="tag-edit"><summary class="small">修改标签</summary>
+        <form method="post" action="/req/{{ req.id }}/tags" class="form">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          {% set tag_ids = tags|map(attribute='id')|list %}
+          {{ tag_picker(all_tags, tag_ids) }}
+          <button type="submit" class="btn btn-sm" style="margin-top:6px">保存标签</button>
+        </form>
+      </details>
+    </dd>
     <dt>负责人</dt><dd>{% if owners %}{% for o in owners %}{{ o.name }}{% if not loop.last %}、{% endif %}{% endfor %}{% else %}<span class="muted">—</span>{% endif %}</dd>
     <dt>备注</dt><dd class="notes">{% if req.notes %}{{ req.notes|linkify }}{% else %}<span class="muted">—</span>{% endif %}</dd>
     <dt>创建</dt><dd>{{ creator }} · {{ fmt_dt(req.created_at) }}</dd>

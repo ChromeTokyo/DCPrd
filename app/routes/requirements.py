@@ -35,7 +35,7 @@ def _set_owners(ctx: Ctx, req_id: int, owner_ids: list[int]) -> None:
 
 
 @router.get("/")
-async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", page: int = 1):
+async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", page: int = 1, tag: int | None = None):
     ctx.require_user()
     project = project if project in PROJECTS else ""
     q = (q or "").strip()
@@ -45,13 +45,17 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
     if project:
         where.append("r.project = ?")
         params.append(project)
+    if tag:
+        where.append("EXISTS (SELECT 1 FROM requirement_tags rt WHERE rt.requirement_id = r.id AND rt.tag_id = ?)")
+        params.append(tag)
     if q:
         like = f"%{q}%"
         where.append(
             "(r.name LIKE ? OR r.jira_keys LIKE ? OR EXISTS (SELECT 1 FROM requirement_owners ro JOIN users u ON u.id = ro.user_id "
-            "WHERE ro.requirement_id = r.id AND u.name LIKE ?))"
+            "WHERE ro.requirement_id = r.id AND u.name LIKE ?) OR EXISTS (SELECT 1 FROM requirement_tags rt JOIN tags t ON t.id = rt.tag_id "
+            "WHERE rt.requirement_id = r.id AND t.deleted_at IS NULL AND t.name LIKE ?))"
         )
-        params += [like, like, like]
+        params += [like, like, like, like]
     where_sql = " AND ".join(where)
     total = db.one(ctx.conn, f"SELECT COUNT(*) AS c FROM requirements r WHERE {where_sql}", params)["c"]
     rows = db.all_rows(
@@ -63,6 +67,7 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
             ORDER BY r.updated_at DESC, r.id DESC LIMIT ? OFFSET ?""",
         [*params, PAGE_SIZE, (page - 1) * PAGE_SIZE],
     )
+    tag_map = queries.tags_for_requirements(ctx.conn, [r["id"] for r in rows])
     items = []
     for r in rows:
         latest = queries.requirement_latest(ctx.conn, r["id"])
@@ -71,7 +76,7 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
             share = f"/s/{doc['share_code']}/" if doc else None
         else:
             share = f"/s/{r['share_code']}/"
-        items.append({"req": r, "latest": latest, "share": share})
+        items.append({"req": r, "latest": latest, "share": share, "tags": tag_map.get(r["id"], [])})
     return ctx.render(
         "index.html",
         items=items,
@@ -80,13 +85,15 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
         page=page,
         pages=max(1, math.ceil(total / PAGE_SIZE)),
         total=total,
+        all_tags=queries.active_tags(ctx.conn),
+        tag=tag,
     )
 
 
 @router.get("/req/new")
 async def req_new_page(ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
-    return ctx.render("req_form.html", req=None, owners=[], users=queries.active_users(ctx.conn), mode="new")
+    return ctx.render("req_form.html", req=None, owners=[], users=queries.active_users(ctx.conn), mode="new", all_tags=queries.active_tags(ctx.conn), tag_ids=[])
 
 
 @router.post("/req/new")
@@ -118,6 +125,7 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
         },
     )
     _set_owners(ctx, req_id, _parse_owner_ids(form))
+    queries.set_tags(ctx.conn, req_id, queries.parse_ids(form, "tags"))
     if kind == "single":
         doc_id = db.insert(
             ctx.conn,
@@ -152,6 +160,8 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
         "creator": queries.user_name(ctx.conn, req["created_by"]),
         "updater": queries.user_name(ctx.conn, req["updated_by"]),
         "can_delete": can_delete(ctx, req),
+        "tags": queries.tags_of(ctx.conn, req_id),
+        "all_tags": queries.active_tags(ctx.conn),
     }
     if req["kind"] == "single":
         doc = queries.primary_document(ctx.conn, req_id)
@@ -165,7 +175,7 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
 async def req_edit_page(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = queries.requirement_or_404(ctx.conn, req_id)
-    return ctx.render("req_form.html", req=req, owners=[o["id"] for o in queries.owners_of(ctx.conn, req_id)], users=queries.active_users(ctx.conn), mode="edit")
+    return ctx.render("req_form.html", req=req, owners=[o["id"] for o in queries.owners_of(ctx.conn, req_id)], users=queries.active_users(ctx.conn), mode="edit", all_tags=queries.active_tags(ctx.conn), tag_ids=[t["id"] for t in queries.tags_of(ctx.conn, req_id)])
 
 
 @router.post("/req/{req_id}/edit")
@@ -185,11 +195,25 @@ async def req_edit(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
          "updated_at": db.utcnow(), "updated_by": ctx.user["id"]},
     )
     _set_owners(ctx, req_id, _parse_owner_ids(form))
+    queries.set_tags(ctx.conn, req_id, queries.parse_ids(form, "tags"))
     if req["kind"] == "single":
         doc = queries.primary_document(ctx.conn, req_id)
         if doc:
             db.update(ctx.conn, "documents", doc["id"], {"name": name, "updated_at": db.utcnow()})
     ctx.flash("ok", "已保存")
+    return ctx.redirect(f"/req/{req_id}")
+
+
+@router.post("/req/{req_id}/tags")
+async def req_tags(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
+    """详情页快速挂标签（所有登录用户）。"""
+    ctx.require_user()
+    form = await request.form()
+    ctx.check_csrf(form)
+    queries.requirement_or_404(ctx.conn, req_id)
+    queries.set_tags(ctx.conn, req_id, queries.parse_ids(form, "tags"))
+    db.update(ctx.conn, "requirements", req_id, {"updated_at": db.utcnow(), "updated_by": ctx.user["id"]})
+    ctx.flash("ok", "标签已更新")
     return ctx.redirect(f"/req/{req_id}")
 
 

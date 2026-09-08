@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import confirm_form, tag_chip %}
+{% block title %}标签管理 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>标签管理</h1></div>
+<section class="card">
+  <h3>新增标签</h3>
+  <form method="post" action="/admin/tags/new" class="form-row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="text" name="name" placeholder="如：紧急 / 已评审 / 待验收" required maxlength="30">
+    <select name="color">{% for c in colors %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+    <button type="submit" class="btn btn-primary">创建</button>
+  </form>
+  <p class="muted small">管理员定义标签；任何登录用户都可以在需求的新建/编辑表单或详情页给需求挂任意多个标签。</p>
+</section>
+<section class="card">
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>标签</th><th>使用次数</th><th class="actions">编辑</th><th></th></tr></thead>
+    <tbody>
+    {% for t in tags %}
+    <tr>
+      <td>{{ tag_chip(t) }}</td>
+      <td>{{ t.used }}</td>
+      <td class="actions">
+        <form method="post" action="/admin/tags/{{ t.id }}/edit" class="inline form-row">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="text" name="name" value="{{ t.name }}" maxlength="30" style="max-width:160px">
+          <select name="color">{% for c in colors %}<option value="{{ c }}" {% if t.color == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+          <button type="submit" class="btn btn-sm">保存</button>
+        </form>
+      </td>
+      <td>{{ confirm_form('/admin/tags/' ~ t.id ~ '/delete', csrf, '删除', '确定删除标签「' ~ t.name ~ '」？已挂该标签的 ' ~ t.used ~ ' 个需求会失去这个标签。') }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">还没有标签。</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

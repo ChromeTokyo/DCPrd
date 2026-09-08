@@ -105,3 +105,49 @@ def requirement_latest(conn: sqlite3.Connection, req_id: int) -> sqlite3.Row | N
 
 def touch_requirement(conn: sqlite3.Connection, req_id: int, user_id: int) -> None:
     conn.execute("UPDATE requirements SET updated_at = ?, updated_by = ? WHERE id = ?", (db.utcnow(), user_id, req_id))
+
+
+TAG_COLORS = ("gray", "red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink")
+
+
+def active_tags(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return db.all_rows(conn, "SELECT * FROM tags WHERE deleted_at IS NULL ORDER BY position, name")
+
+
+def tags_of(conn: sqlite3.Connection, req_id: int) -> list[sqlite3.Row]:
+    return db.all_rows(
+        conn,
+        "SELECT t.* FROM requirement_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.requirement_id = ? AND t.deleted_at IS NULL ORDER BY t.position, t.name",
+        (req_id,),
+    )
+
+
+def tags_for_requirements(conn: sqlite3.Connection, req_ids: list[int]) -> dict[int, list[sqlite3.Row]]:
+    if not req_ids:
+        return {}
+    marks = ",".join("?" * len(req_ids))
+    out: dict[int, list] = {rid: [] for rid in req_ids}
+    for r in db.all_rows(
+        conn,
+        f"SELECT rt.requirement_id, t.* FROM requirement_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.requirement_id IN ({marks}) AND t.deleted_at IS NULL ORDER BY t.position, t.name",
+        req_ids,
+    ):
+        out[r["requirement_id"]].append(r)
+    return out
+
+
+def set_tags(conn: sqlite3.Connection, req_id: int, tag_ids: list[int]) -> None:
+    conn.execute("DELETE FROM requirement_tags WHERE requirement_id = ?", (req_id,))
+    for tid in tag_ids:
+        if db.one(conn, "SELECT 1 FROM tags WHERE id = ? AND deleted_at IS NULL", (tid,)):
+            conn.execute("INSERT OR IGNORE INTO requirement_tags(requirement_id, tag_id) VALUES (?, ?)", (req_id, tid))
+
+
+def parse_ids(form, key: str) -> list[int]:
+    out = []
+    for v in form.getlist(key):
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return out

@@ -106,6 +106,7 @@ cp .env.example .env    # 本地把 DEV_MODE=1、DATA_DIR=./data、DOMAIN=localh
 
 - **上传限流**：中间件先按 `Content-Length` 拒绝超限请求（413），随后把文件按 1MB 分块边读边写临时文件并计数，超限即中止；Caddy 另有 400MB 请求体上限。
 - **每请求一个 SQLite 连接**，`isolation_level=None`（自动提交）+ `busy_timeout=10s`，WAL 模式；schema 用 `CREATE TABLE IF NOT EXISTS` + `schema_version`。
+- **标签**：管理员在「标签」页定义（名称 + 颜色，软删除）；任何登录用户可在需求新建/编辑表单或详情页「修改标签」给需求挂任意多个标签；列表按标签筛选、搜索匹配标签名。
 - **单点登录**：同一账号只保留一个有效会话，在另一处登录后原设备立即退出。
 - **会话永不过期**（需求方 2026-09-08 决定，覆盖 SPEC 的 30 天）：`sessions` 表 + 签名 Cookie（`HttpOnly; SameSite=Lax; Secure`，`DEV_MODE=1` 时不加 Secure），Cookie 按浏览器上限 400 天下发并在访问时滑动续期；只有手动退出、被解绑/删除用户才失效。
 - **分享链接固定不变**：上传新版本不改变 `/s/<code>/`，旧链接始终指向最新版；历史版本用 `/v/<code>/<n>/`（后台版本表可复制）。只有明确点「重置分享链接」才会换码。

@@ -97,3 +97,18 @@ body.auth{background:#eef1f5}
 .dir-list{list-style:none;padding:0;margin:0}
 .dir-list li{padding:12px 0;border-bottom:1px solid var(--line);font-size:16px;display:flex;justify-content:space-between}
 @media (max-width:720px){.topbar .wrap{height:auto;flex-wrap:wrap;padding:8px 12px;gap:8px}.nav{flex-wrap:wrap}.wrap{padding:0 12px}.search input{width:100%}.auth-card{margin:24px auto;padding:20px}.info dl,.card dl{grid-template-columns:1fr}.table th,.table td{padding:8px}}
+/* 标签 */
+.chip{display:inline-block;font-size:11px;line-height:1;padding:4px 8px;border-radius:10px;font-weight:500;vertical-align:middle;text-decoration:none!important;border:1px solid transparent;white-space:nowrap}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.inline-chips{display:inline-flex;margin-top:0}
+.chip-gray{background:#f3f4f6;color:#374151}.chip-red{background:#fee2e2;color:#991b1b}.chip-orange{background:#ffedd5;color:#9a3412}.chip-yellow{background:#fef3c7;color:#92400e}
+.chip-green{background:#dcfce7;color:#166534}.chip-teal{background:#ccfbf1;color:#115e59}.chip-blue{background:#dbeafe;color:#1e40af}.chip-indigo{background:#e0e7ff;color:#3730a3}
+.chip-purple{background:#f3e8ff;color:#6b21a8}.chip-pink{background:#fce7f3;color:#9d174d}
+.chip-all{background:#fff;color:#374151;border-color:#d1d5db}
+.tag-filter{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.tag-filter .chip.active{border-color:#111827;box-shadow:0 0 0 1px #111827}
+.tag-picker{gap:8px}
+.chip-check{font-weight:normal!important}
+.chip-check input{margin:0}
+.tag-edit{margin-top:4px}
+.tag-edit summary{cursor:pointer;color:var(--primary)}

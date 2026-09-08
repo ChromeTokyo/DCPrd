@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import project_tag, kind_tag, jira_links, copy_btn %}
+{% from "_macros.html" import project_tag, kind_tag, jira_links, copy_btn, tag_chip %}
 {% block title %}需求列表 · {{ site_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -15,10 +15,17 @@
   </nav>
   <form method="get" action="/" class="search">
     {% if project %}<input type="hidden" name="project" value="{{ project }}">{% endif %}
-    <input type="search" name="q" value="{{ q }}" placeholder="搜索名称 / Jira 单号 / 负责人">
+    {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+    <input type="search" name="q" value="{{ q }}" placeholder="搜索名称 / Jira 单号 / 负责人 / 标签">
     <button class="btn" type="submit">搜索</button>
   </form>
 </div>
+{% if all_tags %}
+<div class="tag-filter">
+  <a class="chip chip-all {% if not tag %}active{% endif %}" href="/?project={{ project }}&q={{ q|urlquote }}">全部标签</a>
+  {% for t in all_tags %}<a class="chip chip-{{ t.color }} {% if tag == t.id %}active{% endif %}" href="/?project={{ project }}&q={{ q|urlquote }}&tag={{ t.id }}">{{ t.name }}</a>{% endfor %}
+</div>
+{% endif %}
 {% if items %}
 <div class="table-wrap">
 <table class="table reqs">
@@ -27,7 +34,7 @@
   {% for it in items %}
   {% set r = it.req %}
   <tr>
-    <td class="name">{{ project_tag(r.project) }} <a href="/req/{{ r.id }}">{{ r.name }}</a> {{ kind_tag(r.kind) }}{% if r.kind == 'compound' %} <span class="muted small">{{ r.doc_count }} 份子文档</span>{% endif %}</td>
+    <td class="name">{{ project_tag(r.project) }} <a href="/req/{{ r.id }}">{{ r.name }}</a> {{ kind_tag(r.kind) }}{% if r.kind == 'compound' %} <span class="muted small">{{ r.doc_count }} 份子文档</span>{% endif %}{% if it.tags %}<div class="chips">{% for t in it.tags %}{{ tag_chip(t, '/?project=' ~ project ~ '&tag=' ~ t.id) }}{% endfor %}</div>{% endif %}</td>
     <td class="jira-cell">{{ jira_links(r.jira_keys, jira_base_url) }}</td>
     <td>{{ r.owner_names or '' }}</td>
     <td class="latest">{% if it.latest %}v{{ it.latest.number }}{% if r.kind == 'compound' %} <span class="muted">{{ it.latest.doc_name }}</span>{% endif %} · {{ it.latest.uploader_name or '（已删除用户）' }} · {{ fmt_dt(it.latest.uploaded_at) }}{% else %}<span class="muted">暂无</span>{% endif %}</td>
@@ -40,9 +47,9 @@
 </div>
 {% if pages > 1 %}
 <nav class="pager">
-  {% if page > 1 %}<a href="/?project={{ project }}&q={{ q|urlquote }}&page={{ page - 1 }}">上一页</a>{% endif %}
+  {% if page > 1 %}<a href="/?project={{ project }}&q={{ q|urlquote }}&tag={{ tag or '' }}&page={{ page - 1 }}">上一页</a>{% endif %}
   <span>第 {{ page }} / {{ pages }} 页 · 共 {{ total }} 条</span>
-  {% if page < pages %}<a href="/?project={{ project }}&q={{ q|urlquote }}&page={{ page + 1 }}">下一页</a>{% endif %}
+  {% if page < pages %}<a href="/?project={{ project }}&q={{ q|urlquote }}&tag={{ tag or '' }}&page={{ page + 1 }}">下一页</a>{% endif %}
 </nav>
 {% endif %}
 {% else %}

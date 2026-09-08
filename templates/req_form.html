@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import tag_picker %}
 {% block title %}{% if mode == 'new' %}新建需求{% else %}编辑需求{% endif %} · {{ site_name }}{% endblock %}
 {% block content %}
 <div class="page-head"><h1>{% if mode == 'new' %}新建需求{% else %}编辑需求{% endif %}</h1></div>
@@ -36,6 +37,10 @@
       <label class="check"><input type="checkbox" name="owners" value="{{ u.id }}" {% if u.id in owners %}checked{% endif %}> {{ u.name }}</label>
     {% endfor %}
     </div>
+  </div>
+  <div class="field">
+    <label>标签</label>
+    {{ tag_picker(all_tags, tag_ids) }}
   </div>
   <div class="field">
     <label>备注</label>

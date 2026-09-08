@@ -152,3 +152,49 @@ def test_list_search_and_tabs(superuser):
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.json() == {"ok": True, "version": "test"}
+
+
+def test_tags_admin_defines_users_attach(superuser, client_factory):
+    csrf = csrf_of(superuser)
+    # 管理员定义标签
+    assert superuser.post("/admin/tags/new", data={"csrf": csrf, "name": "紧急", "color": "red"}, follow_redirects=False).status_code == 303
+    assert superuser.post("/admin/tags/new", data={"csrf": csrf, "name": "已评审", "color": "green"}, follow_redirects=False).status_code == 303
+    superuser.post("/admin/tags/new", data={"csrf": csrf, "name": "紧急", "color": "blue"}, follow_redirects=False)
+    assert "已存在" in superuser.get("/admin/tags").text
+    page = superuser.get("/admin/tags").text
+    ids = dict(zip(re.findall(r'chip chip-\w+">([^<]+)</span>', page), re.findall(r"/admin/tags/(\d+)/edit", page)))
+    assert set(ids) == {"紧急", "已评审"}
+    # 普通用户：不能管理标签，但能给需求挂任意多个标签
+    superuser.post("/admin/users/new", data={"csrf": csrf, "name": "小李"}, follow_redirects=False)
+    code = re.search(r"/invite/([A-Za-z0-9_\-]+)", superuser.get("/admin/users").text).group(1)
+    li = client_factory()
+    li.get(f"/invite/{code}")
+    from tests.conftest import login
+    assert login(li, 7007, "Li").status_code == 302
+    lcsrf = csrf_of(li)
+    assert li.get("/admin/tags").status_code == 403
+    assert li.post("/admin/tags/new", data={"csrf": lcsrf, "name": "x"}, follow_redirects=False).status_code == 403
+    assert "紧急" in li.get("/req/new").text  # 表单里能看到标签
+    r = li.post("/req/new", data={"csrf": lcsrf, "project": "eb", "kind": "single", "name": "带标签的需求", "tags": [ids["紧急"], ids["已评审"]]}, follow_redirects=False)
+    assert r.status_code == 303, r.text[:300]
+    rid = int(re.search(r"/req/(\d+)", r.headers["location"]).group(1))
+    detail = li.get(f"/req/{rid}").text
+    assert "紧急" in detail and "已评审" in detail
+    home = li.get("/").text
+    assert 'class="chip chip-red"' in home and "带标签的需求" in home
+    # 按标签筛选、搜索标签名
+    create_single(li, lcsrf, "无标签需求")
+    filtered = li.get(f"/?tag={ids['紧急']}").text
+    assert "带标签的需求" in filtered and "无标签需求" not in filtered
+    assert "带标签的需求" in li.get("/?q=评审").text and "无标签需求" not in li.get("/?q=评审").text
+    # 详情页快速改标签（他人的需求也可以）
+    assert superuser.post(f"/req/{rid}/tags", data={"csrf": csrf, "tags": ids["已评审"]}, follow_redirects=False).status_code == 303
+    detail = li.get(f"/req/{rid}").text.split("<dt>标签</dt>")[1].split('<details class="tag-edit">')[0]
+    assert "已评审" in detail and "紧急" not in detail
+    # 编辑表单保留勾选；改名与删除
+    assert f'value="{ids["已评审"]}" checked' in li.get(f"/req/{rid}/edit").text
+    superuser.post(f"/admin/tags/{ids['已评审']}/edit", data={"csrf": csrf, "name": "评审通过", "color": "teal"}, follow_redirects=False)
+    assert "评审通过" in li.get(f"/req/{rid}").text
+    superuser.post(f"/admin/tags/{ids['已评审']}/delete", data={"csrf": csrf}, follow_redirects=False)
+    assert "评审通过" not in li.get(f"/req/{rid}").text and "评审通过" not in li.get("/").text
+    assert "delete_tag" in superuser.get("/admin/audit").text
