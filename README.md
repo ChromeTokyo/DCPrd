@@ -101,3 +101,7 @@ cp .env.example .env    # 本地把 DEV_MODE=1、DATA_DIR=./data、DOMAIN=localh
 - **zip**：拒绝绝对路径 / `..`，跳过 `__MACOSX`、`.DS_Store`、`Thumbs.db`、符号链接；文件名按 utf-8 → gbk 顺序还原；单一顶层目录自动剥离；解压总量 ≤ 4×上传上限、文件数 ≤ 100000。
 - **公开文档**：`/s/` 为 `no-cache`，`/v/` 为一年 immutable；html 响应按 `<meta charset>` 输出 charset；沙箱开关默认开（CSP `sandbox` 不含 `allow-same-origin`）。
 - 时间统一存 UTC 字符串（`YYYY-MM-DDTHH:MM:SS`），展示时按系统设置的时区转换。
+
+## 部署记录
+
+- 2026-09-08：首次部署到 `57.180.39.231`（Amazon Linux 2023，`ec2-user`），Let's Encrypt 证书签发成功，自动更新 timer 已启用。
