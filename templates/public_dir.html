@@ -13,7 +13,7 @@
     <li class="pd-item {% if not item.latest %}pd-empty{% endif %}">
       <div class="pd-main">
         <div class="pd-name">{% if item.latest %}<a href="/s/{{ item.doc.share_code }}/">{{ item.doc.name }}</a>{% else %}{{ item.doc.name }}{% endif %}</div>
-        <div class="pd-meta muted small">{% if item.latest %}v{{ item.latest.number }} · {{ fmt_dt(item.latest.uploaded_at) }}{% else %}暂无发布版本{% endif %}</div>
+        <div class="pd-meta muted small">{% if item.latest %}v{{ item.latest.number }} · {{ item.latest.uploader_name or '（已删除用户）' }} · {{ fmt_dt(item.latest.uploaded_at) }}{% else %}暂无发布版本{% endif %}</div>
       </div>
       {% if item.latest %}<a class="btn btn-sm btn-primary" href="/s/{{ item.doc.share_code }}/">打开</a>{% endif %}
     </li>

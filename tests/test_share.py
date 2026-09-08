@@ -105,6 +105,7 @@ def test_compound_directory_and_convert(superuser):
     superuser.post(f"/req/{rid}/docs/new", data={"csrf": csrf, "name": "子三（无文件）"}, follow_redirects=False)
     r = superuser.get(f"/s/{req_code}/")
     assert r.status_code == 200 and "单体" in r.text and "子二" in r.text and "子三" in r.text and "暂无发布版本" in r.text
+    assert "v1 · Super · " in r.text  # 每份文档显示更新人
     assert r.headers.get("x-frame-options") is None
     # 软删除子文档后目录页与链接不可见
     doc2_id = int(re.search(r'/doc/(\d+)">子二', superuser.get(f"/req/{rid}").text).group(1))
