@@ -3,20 +3,24 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ req.name }}</title><link rel="stylesheet" href="/static/style.css"></head>
 <body class="public-dir">
 <main class="wrap narrow">
-  <h1>{{ req.name }}</h1>
-  <p class="muted">共 {{ docs|length }} 份文档</p>
-  <ul class="dir-list">
+  <header class="pd-head">
+    <div class="pd-kicker"><span class="tag tag-{{ req.project }}">{{ PROJECTS.get(req.project, req.project|upper) }}</span> 需求文档目录</div>
+    <h1>{{ req.name }}</h1>
+    <p class="muted">共 {{ docs|length }} 份文档 · 更新于 {{ fmt_dt(req.updated_at) }}</p>
+  </header>
+  <ol class="pd-list">
   {% for item in docs %}
-    <li>
-      {% if item.latest %}
-        <a href="/s/{{ item.doc.share_code }}/">{{ item.doc.name }}</a>
-        <span class="muted">v{{ item.latest.number }}</span>
-      {% else %}
-        <span>{{ item.doc.name }}</span> <span class="muted">（暂无发布版本）</span>
-      {% endif %}
+    <li class="pd-item {% if not item.latest %}pd-empty{% endif %}">
+      <div class="pd-main">
+        <div class="pd-name">{% if item.latest %}<a href="/s/{{ item.doc.share_code }}/">{{ item.doc.name }}</a>{% else %}{{ item.doc.name }}{% endif %}</div>
+        <div class="pd-meta muted small">{% if item.latest %}v{{ item.latest.number }} · {{ fmt_dt(item.latest.uploaded_at) }}{% else %}暂无发布版本{% endif %}</div>
+      </div>
+      {% if item.latest %}<a class="btn btn-sm btn-primary" href="/s/{{ item.doc.share_code }}/">打开</a>{% endif %}
     </li>
+  {% else %}
+    <li class="pd-item pd-empty"><div class="pd-main"><div class="pd-name muted">还没有文档</div></div></li>
   {% endfor %}
-  </ul>
+  </ol>
 </main>
 </body>
 </html>

@@ -240,8 +240,14 @@ async def req_convert(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)
     if req["kind"] != "single":
         ctx.flash("err", "该需求已经是复合需求")
         return ctx.redirect(f"/req/{req_id}")
+    doc = queries.primary_document(ctx.conn, req_id)
+    if doc:
+        # 已发出去的文档链接不变：原文档码交给目录页，文档换新码
+        old_doc_code = doc["share_code"]
+        db.update(ctx.conn, "documents", doc["id"], {"share_code": new_share_code(ctx.conn), "updated_at": db.utcnow()})
+        db.update(ctx.conn, "requirements", req_id, {"share_code": old_doc_code})
     db.update(ctx.conn, "requirements", req_id, {"kind": "compound", "updated_at": db.utcnow(), "updated_by": ctx.user["id"]})
-    ctx.flash("ok", "已转为复合需求，原文档成为第一个子文档")
+    ctx.flash("ok", "已转为复合需求：原来的分享链接现在打开目录页，原文档成为第一个子文档（子文档有了新的直达链接）")
     return ctx.redirect(f"/req/{req_id}")
 
 

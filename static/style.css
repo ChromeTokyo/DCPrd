@@ -112,3 +112,18 @@ body.auth{background:#eef1f5}
 .chip-check input{margin:0}
 .tag-edit{margin-top:4px}
 .tag-edit summary{cursor:pointer;color:var(--primary)}
+
+/* 复合需求公开目录页 */
+body.public-dir{background:#f5f6f8}
+.pd-head{padding:36px 0 12px}
+.pd-kicker{color:var(--muted);font-size:13px;margin-bottom:6px}
+.pd-head h1{font-size:26px;margin:0 0 6px}
+.pd-list{list-style:none;padding:0;margin:8px 0 40px;counter-reset:pd}
+.pd-item{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:10px;counter-increment:pd}
+.pd-item::before{content:counter(pd);width:28px;height:28px;border-radius:50%;background:#eef2ff;color:var(--primary);font-weight:600;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.pd-item.pd-empty::before{background:#f3f4f6;color:#9ca3af}
+.pd-main{flex:1;min-width:0}
+.pd-name{font-size:16px;font-weight:600}
+.pd-name a{color:var(--text)}
+.pd-item .btn{flex:none}
+@media (max-width:600px){.pd-head{padding-top:20px}.pd-item{padding:12px}}

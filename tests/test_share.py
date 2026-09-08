@@ -89,12 +89,17 @@ def test_compound_directory_and_convert(superuser):
     doc_code = share_code_of(detail)
     assert superuser.post(f"/req/{rid}/convert", data={"csrf": csrf}, follow_redirects=False).status_code == 303
     detail = superuser.get(f"/req/{rid}").text
-    assert "复合" in detail and "目录页链接" in detail
-    req_code = re.search(r"目录页链接.*?/s/([a-z0-9]{12})/", detail, re.S).group(1)
-    assert req_code != doc_code
-    # 原文档保留，历史保留
-    assert superuser.get(f"/s/{doc_code}/").text.find("single") > 0
-    assert superuser.get(f"/v/{doc_code}/1/").status_code == 200
+    assert "复合" in detail and "目录入口页" in detail
+    req_code = re.search(r"目录入口页.*?/s/([a-z0-9]{12})/", detail, re.S).group(1)
+    assert req_code == doc_code  # 已发出的链接不变：原文档码现在是目录入口
+    r = superuser.get(f"/s/{doc_code}/")
+    assert r.status_code == 200 and "需求文档目录" in r.text and "单体" in r.text
+    # 原文档换了新码，内容与历史保留
+    new_doc_code = re.search(r'/s/([a-z0-9]{12})/">单体', r.text).group(1)
+    assert new_doc_code != doc_code
+    assert superuser.get(f"/s/{new_doc_code}/").text.find("single") > 0
+    assert superuser.get(f"/v/{new_doc_code}/1/").status_code == 200
+    doc_code = new_doc_code
     # 新增两个子文档
     superuser.post(f"/req/{rid}/docs/new", data={"csrf": csrf, "name": "子二"}, files={"file": html_file("b.html", "bbb")}, follow_redirects=False)
     superuser.post(f"/req/{rid}/docs/new", data={"csrf": csrf, "name": "子三（无文件）"}, follow_redirects=False)

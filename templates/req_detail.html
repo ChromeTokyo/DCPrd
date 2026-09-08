@@ -42,7 +42,7 @@
   {{ upload_form('/doc/' ~ doc.id ~ '/upload', csrf) }}
   {% endif %}
 {% else %}
-  {{ share_box(base_url ~ '/s/' ~ req.share_code ~ '/', '目录页链接') }}
+  {{ share_box(base_url ~ '/s/' ~ req.share_code ~ '/', '分享链接（目录入口页，列出全部子文档）') }}
   <section class="card">
     <h3>子文档 <span class="muted">({{ docs|length }})</span></h3>
     {% if docs %}

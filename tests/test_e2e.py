@@ -151,7 +151,7 @@ def test_full_flow(browser, live_url):
     assert admin.locator("#confirm-modal").is_visible()
     confirm(admin)
     admin.wait_for_url(req1_url)
-    assert "目录页链接" in admin.content() and "支付流程改版" in admin.content()
+    assert "目录入口页" in admin.content() and "支付流程改版" in admin.content()
 
     # 9. 普通用户建需求 → 管理员删除 → 审计日志
     user.goto(f"{base_url}/req/new")
