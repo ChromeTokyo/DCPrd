@@ -94,8 +94,12 @@ def parse_tree(html_text: str) -> Node:
 
 
 def _sig(n: Node) -> str:
+    """节点签名：有 id/name 的用标识；叶子节点带上文字，使表格插列、列表插项能按内容对齐。"""
     ident = n.attrs.get("id") or n.attrs.get("data-key") or n.attrs.get("name") or ""
-    return f"{n.tag}#{ident}|{n.attrs.get('class', '')}"
+    sig = f"{n.tag}#{ident}|{n.attrs.get('class', '')}"
+    if not n.children and not ident:
+        sig += "|" + n.text[:80]
+    return sig
 
 
 def _content_hash(n: Node) -> str:
