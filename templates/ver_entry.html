@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}选择入口文件 · {{ site_name }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/">需求列表</a> › <a href="/req/{{ req.id }}">{{ req.name }}</a>{% if req.kind == 'compound' %} › <a href="/doc/{{ doc.id }}">{{ doc.name }}</a>{% endif %} › v{{ ver.number }}</p>
+<div class="page-head"><h1>选择入口文件</h1></div>
+<section class="card">
+  {% if ver.entry_path %}
+  <p>当前入口：<code>{{ ver.entry_path }}</code></p>
+  {% else %}
+  <p>压缩包 <strong>{{ ver.original_filename }}</strong> 中有 {{ candidates|length }} 个 html 文件，无法自动判定入口，请选择打开分享链接时显示的页面：</p>
+  {% endif %}
+  {% if candidates %}
+  <form method="post" action="/ver/{{ ver.id }}/entry" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="entry-list">
+    {% for c in candidates %}
+      <label class="radio"><input type="radio" name="entry" value="{{ c }}" {% if c == ver.entry_path %}checked{% endif %} required> <code>{{ c }}</code></label>
+    {% endfor %}
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">确定</button><a class="btn" href="{{ back }}">稍后再选</a></div>
+  </form>
+  {% else %}
+  <p><a class="btn" href="{{ back }}">返回</a></p>
+  {% endif %}
+</section>
+{% endblock %}

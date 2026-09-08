@@ -1,0 +1,88 @@
+{% macro project_tag(project) -%}
+<span class="tag tag-{{ project }}">{{ PROJECTS.get(project, project|upper) }}</span>
+{%- endmacro %}
+
+{% macro kind_tag(kind) -%}
+{% if kind == 'compound' %}<span class="tag tag-kind">复合</span>{% else %}<span class="tag tag-kind tag-single">单体</span>{% endif %}
+{%- endmacro %}
+
+{% macro jira_links(text, jira_base_url) -%}
+{% for k in text|jira_keys %}<a class="jira" href="{{ jira_base_url }}/browse/{{ k }}" target="_blank" rel="noopener">{{ k }}</a>{% if not loop.last %} {% endif %}{% endfor %}
+{%- endmacro %}
+
+{% macro copy_btn(url, label='复制链接') -%}
+<button type="button" class="btn btn-sm copy" data-copy="{{ url }}">{{ label }}</button>
+{%- endmacro %}
+
+{% macro share_box(url, title='分享链接') -%}
+<div class="share-box">
+  <label>{{ title }}</label>
+  <div class="share-row">
+    <input type="text" readonly value="{{ url }}" onclick="this.select()">
+    {{ copy_btn(url) }}
+    <a class="btn btn-sm" href="{{ url }}" target="_blank" rel="noopener">打开</a>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro confirm_form(action, csrf, label, message, cls='btn btn-sm btn-danger') -%}
+<form method="post" action="{{ action }}" class="inline" data-confirm="{{ message }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button type="submit" class="{{ cls }}">{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% macro upload_form(action, csrf, title='上传新版本') -%}
+<section class="card">
+  <h3>{{ title }}</h3>
+  <form method="post" action="{{ action }}" enctype="multipart/form-data" class="form-inline-block">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field">
+      <label>文件（.html / .htm / .zip）</label>
+      <input type="file" name="file" accept=".html,.htm,.zip" required>
+    </div>
+    <div class="field">
+      <label>本次更新说明（可选）</label>
+      <input type="text" name="note" maxlength="500" placeholder="例如：补充了支付流程">
+    </div>
+    <button type="submit" class="btn btn-primary">上传</button>
+  </form>
+</section>
+{%- endmacro %}
+
+{% macro version_table(versions, doc, base_url, csrf, is_admin, fmt_dt) -%}
+<section class="card">
+  <h3>版本历史 <span class="muted">({{ versions|length }})</span></h3>
+  {% if versions %}
+  <div class="table-wrap">
+  <table class="table versions">
+    <thead><tr><th>版本</th><th>上传人</th><th>上传时间</th><th>文件</th><th>更新说明</th><th class="actions">操作</th></tr></thead>
+    <tbody>
+    {% for v in versions %}
+    <tr class="{% if not v.entry_path %}pending{% endif %}">
+      <td><strong>v{{ v.number }}</strong>{% if not v.entry_path %} <span class="tag tag-warn">待选择入口</span>{% endif %}</td>
+      <td>{{ v.uploader_name or '（已删除用户）' }}</td>
+      <td class="nowrap">{{ fmt_dt(v.uploaded_at) }}</td>
+      <td class="file"><span title="{{ v.original_filename }}">{{ v.original_filename }}</span><br><span class="muted">{{ v.size_bytes|filesize }} · {{ v.kind|upper }}{% if v.kind == 'zip' %} · {{ v.file_count }} 个文件{% endif %}</span></td>
+      <td class="note">{{ v.note }}</td>
+      <td class="actions">
+        {% if v.entry_path %}
+        <a class="btn btn-sm" href="/v/{{ doc.share_code }}/{{ v.number }}/" target="_blank" rel="noopener">查看</a>
+        {{ copy_btn(base_url ~ '/v/' ~ doc.share_code ~ '/' ~ v.number ~ '/') }}
+        <form method="post" action="/ver/{{ v.id }}/republish" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn btn-sm">重新发布</button></form>
+        {% else %}
+        <a class="btn btn-sm btn-primary" href="/ver/{{ v.id }}/entry">选择入口</a>
+        {% endif %}
+        <a class="btn btn-sm" href="/ver/{{ v.id }}/download">下载原文件</a>
+        {% if is_admin %}{{ confirm_form('/ver/' ~ v.id ~ '/delete', csrf, '删除', '确定删除 v' ~ v.number ~ '？该版本的分享链接将立即失效（数据保留在库中，可由技术人员恢复）。') }}{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">尚未上传任何版本。</p>
+  {% endif %}
+</section>
+{%- endmacro %}

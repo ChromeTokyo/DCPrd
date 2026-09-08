@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ req.name }}</title><link rel="stylesheet" href="/static/style.css"></head>
+<body class="public-dir">
+<main class="wrap narrow">
+  <h1>{{ req.name }}</h1>
+  <p class="muted">共 {{ docs|length }} 份文档</p>
+  <ul class="dir-list">
+  {% for item in docs %}
+    <li>
+      {% if item.latest %}
+        <a href="/s/{{ item.doc.share_code }}/">{{ item.doc.name }}</a>
+        <span class="muted">v{{ item.latest.number }}</span>
+      {% else %}
+        <span>{{ item.doc.name }}</span> <span class="muted">（暂无发布版本）</span>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</main>
+</body>
+</html>

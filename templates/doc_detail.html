@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_macros.html" import project_tag, copy_btn, share_box, confirm_form, upload_form, version_table %}
+{% block title %}{{ doc.name }} · {{ req.name }} · {{ site_name }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/">需求列表</a> › <a href="/req/{{ req.id }}">{{ project_tag(req.project) }} {{ req.name }}</a> › {{ doc.name }}</p>
+<div class="page-head">
+  <h1>{{ doc.name }}</h1>
+  <div class="actions">
+    <form method="post" action="/doc/{{ doc.id }}/reset-share" class="inline" data-confirm="重置后旧的分享链接将立即失效（404）。确定重置吗？"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn">重置分享链接</button></form>
+    {% if can_delete %}{{ confirm_form('/doc/' ~ doc.id ~ '/delete', csrf, '删除子文档', '确定删除子文档「' ~ doc.name ~ '」？其分享链接将失效。', 'btn btn-danger') }}{% endif %}
+  </div>
+</div>
+<section class="card">
+  <form method="post" action="/doc/{{ doc.id }}/edit" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>名称</label><input type="text" name="name" value="{{ doc.name }}" required maxlength="200"></div>
+    <div class="field"><label>备注</label><textarea name="notes" rows="3">{{ doc.notes }}</textarea></div>
+    <div class="form-actions"><button type="submit" class="btn">保存</button><span class="muted small">创建：{{ creator }} · {{ fmt_dt(doc.created_at) }}</span></div>
+  </form>
+</section>
+{{ share_box(base_url ~ '/s/' ~ doc.share_code ~ '/') }}
+{% if latest %}<p class="muted">当前公开的是 v{{ latest.number }}（{{ latest.uploader_name }} · {{ fmt_dt(latest.uploaded_at) }}）</p>{% else %}<p class="muted">尚无已发布版本，分享链接暂时返回 404。</p>{% endif %}
+{{ version_table(versions, doc, base_url, csrf, is_admin, fmt_dt) }}
+{{ upload_form('/doc/' ~ doc.id ~ '/upload', csrf) }}
+{% endblock %}

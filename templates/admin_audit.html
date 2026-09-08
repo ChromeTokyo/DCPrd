@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}审计日志 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>审计日志 <span class="muted">最近 {{ logs|length }} 条</span></h1></div>
+<section class="card">
+  <div class="table-wrap">
+  <table class="table audit">
+    <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr></thead>
+    <tbody>
+    {% for l in logs %}
+    <tr>
+      <td class="nowrap">{{ fmt_dt(l.at, '%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ l.user_name or '系统' }}</td>
+      <td><code>{{ l.action }}</code></td>
+      <td>{% if l.target_type %}{{ l.target_type }}{% if l.target_id %} #{{ l.target_id }}{% endif %}{% endif %}</td>
+      <td class="detail">{{ l.detail or '' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">暂无记录</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

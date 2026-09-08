@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_macros.html" import copy_btn, confirm_form %}
+{% block title %}用户管理 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>用户管理</h1></div>
+<section class="card">
+  <h3>新增用户</h3>
+  <form method="post" action="/admin/users/new" class="form-row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="text" name="name" placeholder="成员名称，如：张三" required maxlength="100">
+    <button type="submit" class="btn btn-primary">创建并生成邀请链接</button>
+  </form>
+</section>
+<section class="card">
+  <div class="table-wrap">
+  <table class="table users">
+    <thead><tr><th>名称</th><th>角色</th><th>Telegram</th><th>邀请链接</th><th class="actions">操作</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{% if u.tg_photo_url %}<img class="avatar" src="{{ u.tg_photo_url }}" alt="">{% endif %} {{ u.name }}</td>
+      <td>{% if u.role == 'super' %}<span class="tag tag-super">超级管理员</span>{% elif u.role == 'admin' %}<span class="tag tag-admin">管理员</span>{% else %}用户{% endif %}</td>
+      <td>{% if u.tg_id %}{% if u.tg_username %}@{{ u.tg_username }}{% else %}{{ u.tg_first_name }} {{ u.tg_last_name or '' }}{% endif %} <span class="muted small">(id {{ u.tg_id }}，绑定于 {{ fmt_dt(u.bound_at) }})</span>{% else %}<span class="muted">未绑定</span>{% endif %}</td>
+      <td>{% if u.invite_code %}<span class="invite">{{ base_url }}/invite/{{ u.invite_code }}</span> {{ copy_btn(base_url ~ '/invite/' ~ u.invite_code, '复制邀请链接') }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="actions">
+        {% if not u.tg_id %}
+        <form method="post" action="/admin/users/{{ u.id }}/regen-invite" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn btn-sm">重置邀请链接</button></form>
+        {% elif u.role != 'super' or u.id == user.id %}
+        {{ confirm_form('/admin/users/' ~ u.id ~ '/unbind', csrf, '解绑', '确定解绑「' ~ u.name ~ '」的 Telegram？其所有登录会话将立即失效，并生成新的邀请链接。', 'btn btn-sm') }}
+        {% endif %}
+        {% if is_super and u.role != 'super' %}
+        <form method="post" action="/admin/users/{{ u.id }}/toggle-admin" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn btn-sm">{% if u.role == 'admin' %}取消管理员{% else %}设为管理员{% endif %}</button></form>
+        {% endif %}
+        {% if u.role != 'super' and u.id != user.id %}
+        {{ confirm_form('/admin/users/' ~ u.id ~ '/delete', csrf, '删除', '确定删除用户「' ~ u.name ~ '」？其登录会话将立即失效。') }}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

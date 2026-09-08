@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+tests/.tmp/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+test-results/
+.DS_Store

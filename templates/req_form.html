@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}新建需求{% else %}编辑需求{% endif %} · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{% if mode == 'new' %}新建需求{% else %}编辑需求{% endif %}</h1></div>
+<form method="post" action="{% if mode == 'new' %}/req/new{% else %}/req/{{ req.id }}/edit{% endif %}" enctype="multipart/form-data" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="field">
+    <label>项目 <span class="req">*</span></label>
+    <div class="radios">
+    {% for key, label in PROJECTS.items() %}
+      <label class="radio"><input type="radio" name="project" value="{{ key }}" {% if (req and req.project == key) or (not req and loop.first) %}checked{% endif %} required> {{ label }}</label>
+    {% endfor %}
+    </div>
+  </div>
+  {% if mode == 'new' %}
+  <div class="field">
+    <label>类型 <span class="req">*</span></label>
+    <div class="radios">
+      <label class="radio"><input type="radio" name="kind" value="single" checked id="kind-single"> 单体需求（一个需求 = 一份文档）</label>
+      <label class="radio"><input type="radio" name="kind" value="compound" id="kind-compound"> 复合需求（多份子文档）</label>
+    </div>
+  </div>
+  {% endif %}
+  <div class="field">
+    <label>名称 <span class="req">*</span></label>
+    <input type="text" name="name" value="{{ req.name if req else '' }}" required maxlength="200">
+  </div>
+  <div class="field">
+    <label>Jira 单号（可多个，空格或逗号分隔）</label>
+    <input type="text" name="jira_keys" value="{{ req.jira_keys if req else '' }}" placeholder="DC-85989 DC-86001">
+  </div>
+  <div class="field">
+    <label>负责人（可多选）</label>
+    <div class="checks">
+    {% for u in users %}
+      <label class="check"><input type="checkbox" name="owners" value="{{ u.id }}" {% if u.id in owners %}checked{% endif %}> {{ u.name }}</label>
+    {% endfor %}
+    </div>
+  </div>
+  <div class="field">
+    <label>备注</label>
+    <textarea name="notes" rows="4">{{ req.notes if req else '' }}</textarea>
+  </div>
+  {% if mode == 'new' %}
+  <div id="first-upload">
+    <div class="field">
+      <label>首个文件（可选，仅单体需求；.html / .htm / .zip）</label>
+      <input type="file" name="file" accept=".html,.htm,.zip">
+    </div>
+    <div class="field">
+      <label>更新说明（可选）</label>
+      <input type="text" name="note" maxlength="500">
+    </div>
+  </div>
+  {% endif %}
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{% if mode == 'new' %}创建{% else %}保存{% endif %}</button>
+    <a class="btn" href="{% if mode == 'new' %}/{% else %}/req/{{ req.id }}{% endif %}">取消</a>
+  </div>
+</form>
+{% endblock %}

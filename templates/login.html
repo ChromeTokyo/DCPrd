@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}登录 · {{ site_name }}{% endblock %}
+{% block bodyclass %}auth{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h1>{{ site_name }}</h1>
+  {% if init_mode %}
+  <div class="notice">系统初始化：第一个登录的 Telegram 账号将成为超级管理员。</div>
+  {% endif %}
+  {% if error %}<div class="flash flash-err">{{ error }}</div>{% endif %}
+  <p class="muted">使用 Telegram 账号登录，无需密码。</p>
+  <div class="tg-widget">
+    <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ cfg.tg_bot_username }}" data-size="large" data-auth-url="{{ auth_url }}" data-request-access="write"></script>
+  </div>
+  <p class="muted small">若按钮未显示，请确认 Bot 已通过 @BotFather 的 /setdomain 绑定到 {{ cfg.domain }}。</p>
+</div>
+{% endblock %}

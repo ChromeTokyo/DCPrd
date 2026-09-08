@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ site_name }}{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+{% if csrf %}<meta name="csrf" content="{{ csrf }}">{% endif %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+{% block nav %}
+{% if user %}
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/">{{ site_name }}</a>
+    <nav class="nav">
+      <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>需求列表</a>
+      <a href="/req/new" {% if request.url.path == '/req/new' %}class="active"{% endif %}>新建需求</a>
+      {% if is_admin %}
+      <a href="/admin/users" {% if request.url.path.startswith('/admin/users') %}class="active"{% endif %}>用户管理</a>
+      <a href="/admin/settings" {% if request.url.path.startswith('/admin/settings') %}class="active"{% endif %}>系统设置</a>
+      <a href="/admin/audit" {% if request.url.path.startswith('/admin/audit') %}class="active"{% endif %}>审计日志</a>
+      {% endif %}
+    </nav>
+    <div class="me">
+      {% if user.tg_photo_url %}<img class="avatar" src="{{ user.tg_photo_url }}" alt="">{% endif %}
+      <span class="me-name" title="{{ user.role }}">{{ user.name }}{% if user.role == 'super' %} <span class="role">超管</span>{% elif user.role == 'admin' %} <span class="role">管理员</span>{% endif %}</span>
+      <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-link" type="submit">退出</button></form>
+    </div>
+  </div>
+</header>
+{% endif %}
+{% endblock %}
+<main class="wrap {% block mainclass %}{% endblock %}">
+  {% if flash %}<div class="flash flash-{{ flash.t }}" id="flash">{{ flash.m }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<div class="modal" id="confirm-modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <p id="confirm-text">确定要执行此操作吗？</p>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="confirm-cancel">取消</button>
+      <button type="button" class="btn btn-danger" id="confirm-ok">确定</button>
+    </div>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
