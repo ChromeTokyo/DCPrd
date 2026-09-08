@@ -1,0 +1,70 @@
+{% extends "v2/layout.html" %}
+{% from "_macros.html" import confirm_form %}
+{% from "v2/_menu_tree.html" import menu_tree %}
+{% block title %}{{ app.name }} · 系统与端 · {{ site_name }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/v2/admin">系统与端</a> › {{ app.system_name }} › {{ app.name }}</p>
+<div class="page-head"><h1>{{ app.name }} <code>{{ app.key }}</code></h1><div class="actions"><a class="btn" href="/v2/?app={{ app.id }}">浏览菜单视图</a>{{ confirm_form('/v2/admin/apps/' ~ app.id ~ '/delete', csrf, '删除端', '确定删除端「' ~ app.name ~ '」？页面与版本数据保留。', 'btn btn-danger') }}</div></div>
+<div class="two-col">
+<section class="card">
+  <h3>基本信息</h3>
+  <form method="post" action="/v2/admin/apps/{{ app.id }}/edit" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>名称</label><input type="text" name="name" value="{{ app.name }}"></div>
+    <div class="field"><label>类型</label><select name="kind">{% for k, l in [('web','Web 后台'),('flutter_web','Flutter Web'),('h5','H5'),('other','其他')] %}<option value="{{ k }}" {% if app.kind == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+    <div class="field"><label>快照类型</label><select name="renderer"><option value="html" {% if app.renderer == 'html' %}selected{% endif %}>HTML（DOM 对比）</option><option value="image" {% if app.renderer == 'image' %}selected{% endif %}>截图（像素对比）</option></select></div>
+    <div class="field"><label>地址</label><input type="text" name="base_url" value="{{ app.base_url }}"></div>
+    <div class="field"><label>备注</label><textarea name="notes" rows="2">{{ app.notes }}</textarea></div>
+    <button class="btn">保存</button>
+  </form>
+</section>
+<section class="card">
+  <h3>导入 release 快照</h3>
+  <p class="muted small">用 <code>tools/snap</code> 生成的 zip（含 manifest.json）。同一 release 可重复导入，内容未变化的页面不会产生新版本。</p>
+  <form method="post" action="/v2/admin/apps/{{ app.id }}/snapshots/import" enctype="multipart/form-data" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>快照 zip</label><input type="file" name="file" accept=".zip" required></div>
+    <div class="field"><label>版本号（留空则用 manifest.release）</label><input type="text" name="release" placeholder="3.12.0"></div>
+    <button class="btn btn-primary">导入</button>
+  </form>
+  {% if imports %}
+  <h4>导入记录</h4>
+  <table class="table small"><thead><tr><th>时间</th><th>版本</th><th>文件</th><th>页面</th><th>新基线</th><th>操作人</th></tr></thead><tbody>
+  {% for i in imports %}<tr><td class="nowrap">{{ fmt_dt(i.imported_at) }}</td><td>{{ i.version }}</td><td>{{ i.filename }}</td><td>{{ i.page_count }}</td><td>{{ i.new_versions }}</td><td>{{ i.importer }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+</section>
+</div>
+<div class="two-col">
+<section class="card">
+  <h3>菜单树 <span class="muted small">（快照包自带 menu 时会自动替换）</span></h3>
+  <div class="tree-admin">{% if tree_items %}{{ menu_tree(tree_items, None, True, True) }}{% else %}<p class="muted small">还没有菜单。</p>{% endif %}</div>
+  {% if unlisted %}<p class="small muted">未挂菜单的页面：{% for p in unlisted %}<a href="/v2/p/{{ p.id }}">{{ p.title }}</a>{% if not loop.last %}、{% endif %}{% endfor %}</p>{% endif %}
+  <details><summary>手动添加节点 / 删除节点</summary>
+    <form method="post" action="/v2/admin/apps/{{ app.id }}/menu/node" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="field"><label>标题</label><input type="text" name="title" required></div>
+      <div class="field"><label>路由（叶子页面填，分组留空）</label><input type="text" name="route_key"></div>
+      <div class="field"><label>父节点 ID（留空为根）</label><input type="text" name="parent_id"></div>
+      <button class="btn btn-sm">添加</button>
+    </form>
+    <form method="post" action="" class="form-row" onsubmit="this.action='/v2/admin/apps/{{ app.id }}/menu/node/'+this.node_id.value+'/delete'">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="node_id" placeholder="节点 ID" required><button class="btn btn-sm btn-danger">删除节点及子节点</button>
+    </form>
+    <p class="muted small">节点 ID 显示在上方菜单树每一项后面的 #号。</p>
+  </details>
+</section>
+<section class="card">
+  <h3>导入菜单（前端路由 / 菜单 JSON）</h3>
+  <p class="muted small">支持常见形状：<code>[{title|name|meta.title, path|route, children|routes}]</code>，也可包在 <code>{"routes": [...]}</code> 中。会整棵替换现有菜单；叶子按路由绑定页面。</p>
+  <form method="post" action="/v2/admin/apps/{{ app.id }}/menu/import" enctype="multipart/form-data" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>JSON 文件</label><input type="file" name="file" accept=".json"></div>
+    <div class="field"><label>或直接粘贴</label><textarea name="menu_json" rows="8" placeholder='[{"title":"商户管理","path":"/merchant","children":[{"title":"商户列表","path":"list"}]}]'></textarea></div>
+    <button class="btn">导入菜单</button>
+  </form>
+  <h4>Release 列表</h4>
+  {% if releases %}<ul class="small">{% for r in releases %}<li><strong>{{ r.version }}</strong> · {{ fmt_dt(r.imported_at) }} · {{ r.importer or '' }}</li>{% endfor %}</ul>{% else %}<p class="muted small">尚未导入任何快照。</p>{% endif %}
+</section>
+</div>
+{% endblock %}

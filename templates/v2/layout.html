@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/v2.css">{% endblock %}
+{% block nav %}
+{% if user %}
+<header class="topbar v2bar">
+  <div class="wrap">
+    <a class="brand" href="/v2/">{{ site_name }} <span class="v2tag">2.0</span></a>
+    <nav class="nav">
+      <a href="/v2/" {% if request.url.path == '/v2/' or request.url.path.startswith('/v2/p/') %}class="active"{% endif %}>菜单视图</a>
+      <a href="/v2/req" {% if request.url.path.startswith('/v2/req') %}class="active"{% endif %}>需求单</a>
+      {% if is_admin %}<a href="/v2/admin" {% if request.url.path.startswith('/v2/admin') %}class="active"{% endif %}>系统与端</a>{% endif %}
+      <a href="/" class="back1">← 返回 1.0</a>
+    </nav>
+    <div class="me">
+      <span class="me-name">{{ user.name }}</span>
+      <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-link" type="submit">退出</button></form>
+    </div>
+  </div>
+</header>
+{% endif %}
+{% endblock %}
+{% block mainclass %}v2{% endblock %}

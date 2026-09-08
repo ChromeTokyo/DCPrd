@@ -47,7 +47,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     return HTMLResponse(f"<h1>413</h1><p>上传内容超过上限（{limit // (1024 * 1024)} MB）。</p>", status_code=413)
         response = await call_next(request)
         path = request.url.path
-        if not (path.startswith("/s/") or path.startswith("/v/")):
+        if not (path.startswith("/s/") or path.startswith("/v/") or path.startswith("/p2/") or path.startswith("/v2/content/")):
             response.headers.setdefault("X-Frame-Options", "DENY")
             response.headers.setdefault("Referrer-Policy", "same-origin")
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -174,6 +174,11 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
     for mod in (auth, requirements, documents, versions, admin, public):
         app.include_router(mod.router)
+    from .v2 import public as v2_public
+    from .v2 import routes as v2_routes
+
+    app.include_router(v2_routes.router)
+    app.include_router(v2_public.router)
     return app
 
 

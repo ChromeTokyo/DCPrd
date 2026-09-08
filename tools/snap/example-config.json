@@ -1,0 +1,22 @@
+{
+  "app": "eb-ops-admin",
+  "release": "3.12.0",
+  "base_url": "https://uat-ops.example.com",
+  "kind": "web",
+  "renderer": "html",
+  "hash_routing": false,
+  "routes": "./routes.json",
+  "viewport": { "width": 1440, "height": 900 },
+  "login": {
+    "type": "storage_state",
+    "storage_state": "state.json",
+    "url": "/login"
+  },
+  "login_check_selector": "input[type=password]",
+  "wait": { "network_idle": true, "selector": null, "ms": 1500 },
+  "mask": [".el-table__body", ".ant-table-tbody", "time", ".timestamp"],
+  "remove": [".el-notification", ".ant-message", "#chat-widget"],
+  "exclude": ["/login", "/404"],
+  "retries": 2,
+  "timeout_ms": 45000
+}

@@ -1,0 +1,35 @@
+{% extends "v2/layout.html" %}
+{% block title %}需求单 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>需求单</h1><a class="btn btn-primary" href="/v2/req/new">新建需求</a></div>
+<div class="toolbar">
+  <nav class="tabs">
+    <a href="/v2/req?status={{ status }}&q={{ q|urlquote }}" class="{% if not project %}active{% endif %}">全部</a>
+    {% for key, label in PROJECTS.items() %}<a href="/v2/req?project={{ key }}&status={{ status }}&q={{ q|urlquote }}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ label }}</a>{% endfor %}
+  </nav>
+  <nav class="tabs">
+    <a href="/v2/req?project={{ project }}&q={{ q|urlquote }}" class="{% if not status %}active{% endif %}">所有状态</a>
+    {% for key, label in STATUS_LABELS.items() %}<a href="/v2/req?project={{ project }}&status={{ key }}&q={{ q|urlquote }}" class="{% if status == key %}active{% endif %}">{{ label }}</a>{% endfor %}
+  </nav>
+  <form method="get" action="/v2/req" class="search"><input type="hidden" name="project" value="{{ project }}"><input type="hidden" name="status" value="{{ status }}"><input type="search" name="q" value="{{ q }}" placeholder="搜索单号 / 名称 / 负责人 / 页面"><button class="btn">搜索</button></form>
+</div>
+{% if reqs %}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th>需求</th><th>Jira</th><th>状态</th><th>页面数</th><th>端 / 上线版本</th><th>负责人</th><th>更新时间</th></tr></thead>
+  <tbody>
+  {% for r in reqs %}
+  <tr>
+    <td><span class="tag tag-{{ r.project }}">{{ PROJECTS[r.project] }}</span> <a href="/v2/req/{{ r.id }}">{{ r.name }}</a></td>
+    <td>{% for k in r.jira_keys|jira_keys %}<a class="jira" href="{{ jira_base_url }}/browse/{{ k }}" target="_blank" rel="noopener">{{ k }}</a> {% endfor %}</td>
+    <td><span class="st st-{{ r.v2_status }}">{{ STATUS_LABELS.get(r.v2_status, r.v2_status) }}</span></td>
+    <td>{{ r.page_count }}</td>
+    <td class="small">{{ r.app_versions or '' }}</td>
+    <td>{{ r.owner_names or '' }}</td>
+    <td class="nowrap">{{ fmt_dt(r.updated_at) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<div class="empty">没有需求。</div>{% endif %}
+<p class="muted small">1.0 的需求文档仍在 <a href="/">1.0 需求列表</a> 中查看。</p>
+{% endblock %}

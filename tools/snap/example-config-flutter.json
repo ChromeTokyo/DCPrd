@@ -1,0 +1,21 @@
+{
+  "app": "eb-merchant-app",
+  "release": "1.8.0",
+  "base_url": "https://uat-app.example.com",
+  "kind": "flutter_web",
+  "renderer": "image",
+  "hash_routing": true,
+  "menu": [
+    { "title": "首页", "route": "/home" },
+    { "title": "我的", "route": "/mine", "children": [
+      { "title": "账户信息", "route": "/mine/account" },
+      { "title": "设置", "route": "/mine/settings" }
+    ]}
+  ],
+  "viewport": { "width": 390, "height": 844 },
+  "device_scale_factor": 2,
+  "login": { "type": "storage_state", "storage_state": "state-app.json", "url": "/#/login" },
+  "wait": { "network_idle": true, "ms": 2500 },
+  "flutter_extra_ms": 2000,
+  "full_page": true
+}

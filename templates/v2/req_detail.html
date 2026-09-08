@@ -1,0 +1,88 @@
+{% extends "v2/layout.html" %}
+{% from "_macros.html" import copy_btn, share_box, confirm_form %}
+{% block title %}{{ req.name }} · 需求单 · {{ site_name }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/v2/req">需求单</a> › {{ req.name }}</p>
+<div class="page-head">
+  <h1><span class="tag tag-{{ req.project }}">{{ PROJECTS[req.project] }}</span> {{ req.name }} <span class="st st-{{ req.v2_status }}">{{ STATUS_LABELS.get(req.v2_status, '') }}</span></h1>
+  <div class="actions">
+    <a class="btn" href="/v2/req/{{ req.id }}/edit">编辑</a>
+    {% for key, label in STATUS_LABELS.items() %}{% if key != req.v2_status %}<form method="post" action="/v2/req/{{ req.id }}/status" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="status" value="{{ key }}"><button class="btn">标为{{ label }}</button></form>{% endif %}{% endfor %}
+    <form method="post" action="/v2/req/{{ req.id }}/reset-share" class="inline" data-confirm="重置后旧的分享链接立即失效，确定？"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">重置分享链接</button></form>
+    {% if can_delete %}{{ confirm_form('/v2/req/' ~ req.id ~ '/delete', csrf, '删除需求', '确定删除需求「' ~ req.name ~ '」？', 'btn btn-danger') }}{% endif %}
+  </div>
+</div>
+<section class="card info"><dl>
+  <dt>Jira</dt><dd>{% for k in req.jira_keys|jira_keys %}<a class="jira" href="{{ jira_base_url }}/browse/{{ k }}" target="_blank" rel="noopener">{{ k }}</a> {% else %}<span class="muted">—</span>{% endfor %}</dd>
+  <dt>负责人</dt><dd>{% for o in owners %}{{ o.name }}{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
+  <dt>说明</dt><dd>{% if req.notes %}{{ req.notes|linkify }}{% else %}<span class="muted">—</span>{% endif %}</dd>
+  <dt>创建</dt><dd>{{ creator.name if creator else '' }} · {{ fmt_dt(req.created_at) }}</dd>
+</dl></section>
+{{ share_box(base_url ~ '/p2/' ~ req.share_code ~ '/', '对外分享链接（目录 + 各页改动圈出，免登录）') }}
+
+<section class="card">
+  <h3>涉及页面 <span class="muted">({{ pages|length }})</span></h3>
+  {% if pages %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>页面</th><th>基线</th><th>改稿</th><th>自动圈出</th><th class="actions">操作</th></tr></thead>
+    <tbody>
+    {% for it in pages %}
+    <tr>
+      <td><a href="/v2/p/{{ it.rp.page_id }}{% if it.proposal %}?v={{ it.proposal.id }}{% endif %}">{{ it.rp.title }}</a>{% if it.rp.is_new %} <span class="tag tag-warn">新增</span>{% endif %}<br><span class="muted small">{{ it.rp.app_name }}{% for m in it.menu_path %} › {{ m }}{% endfor %} · <code>{{ it.rp.route_key }}</code></span></td>
+      <td>{% if it.base %}线上 {{ it.base.release_version or '' }}<br><a class="btn btn-sm" href="/v2/download/{{ it.base.id }}">下载基线</a>{% else %}<span class="muted">无基线{% if it.rp.is_new %}（新增页面）{% endif %}</span>{% endif %}</td>
+      <td>{% if it.proposal %}{{ it.proposal.uploader_name }} · {{ fmt_dt(it.proposal.uploaded_at) }}{% if it.proposal.note %}<br><span class="small">{{ it.proposal.note }}</span>{% endif %}{% else %}<span class="muted">未上传</span>{% endif %}</td>
+      <td>{% if it.diff %}{% if it.diff.error %}<span class="muted small">{{ it.diff.error }}</span>{% else %}{{ it.diff.changes|length }} 处{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="actions">
+        <form method="post" action="/v2/req/{{ req.id }}/pages/{{ it.rp.page_id }}/upload" enctype="multipart/form-data" class="upload-inline">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="file" name="file" accept="{{ '.png,.jpg,.jpeg,.webp' if it.rp.renderer == 'image' else '.html,.htm' }}" required>
+          <input type="text" name="note" placeholder="改动说明" maxlength="300">
+          <button class="btn btn-sm btn-primary">上传改稿</button>
+        </form>
+        {{ confirm_form('/v2/req/' ~ req.id ~ '/pages/' ~ it.rp.page_id ~ '/remove', csrf, '移除', '确定把该页面从需求中移除？已上传的改稿会一并隐藏。') }}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">还没有页面。在下方搜索线上页面加入，或新增页面。</p>{% endif %}
+</section>
+
+<div class="two-col">
+<section class="card">
+  <h3>加入已有页面</h3>
+  <form method="get" action="/v2/req/{{ req.id }}" class="form-row"><input type="search" name="pq" value="{{ pq }}" placeholder="搜索页面标题 / 路由"><button class="btn">搜索</button></form>
+  {% if results %}
+  <ul class="results">
+  {% for p in results %}
+    <li><form method="post" action="/v2/req/{{ req.id }}/pages/add" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="page_id" value="{{ p.id }}"><button class="btn btn-sm">加入</button></form> <a href="/v2/p/{{ p.id }}" target="_blank">{{ p.title }}</a> <span class="muted small">{{ p.system_name }} · {{ p.app_name }} · {{ p.route_key }}</span></li>
+  {% endfor %}
+  </ul>
+  {% elif pq %}<p class="muted small">没有匹配的页面。</p>{% endif %}
+</section>
+<section class="card">
+  <h3>新增页面</h3>
+  <form method="post" action="/v2/req/{{ req.id }}/pages/new" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>端</label><select name="app_id" required>{% for a in apps %}<option value="{{ a.id }}">{{ a.system_name }} · {{ a.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>页面标题</label><input type="text" name="title" required></div>
+    <div class="field"><label>路由（与前端约定，如 /merchant/audit）</label><input type="text" name="route_key" required></div>
+    <div class="field"><label>挂到菜单节点 ID（可空，为空挂在根）</label><input type="text" name="parent_id" placeholder="在“系统与端”页面查看节点 ID"></div>
+    <button class="btn btn-primary">新增并加入需求</button>
+  </form>
+</section>
+</div>
+
+<section class="card">
+  <h3>各端上线版本</h3>
+  {% if req_apps %}
+  <form method="post" action="/v2/req/{{ req.id }}/apps" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <table class="table"><thead><tr><th>端</th><th>计划上线版本</th><th>上线对齐</th></tr></thead><tbody>
+    {% for ra in req_apps %}<tr><td>{{ ra.app_name }}</td><td><input type="text" name="release_{{ ra.app_id }}" value="{{ ra.release_version }}" placeholder="如 3.13.0"></td><td>{% if ra.live_at %}<span class="st st-live">已上线 {{ fmt_dt(ra.live_at) }}</span>{% else %}<span class="muted">待导入该版本快照</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+    <button class="btn">保存</button> <span class="muted small">导入某端对应版本的快照时，会自动把该端标为已上线；所有端都上线后需求状态自动变为「已上线」。</span>
+  </form>
+  {% else %}<p class="muted">加入页面后会自动列出涉及的端。</p>{% endif %}
+</section>
+{% endblock %}

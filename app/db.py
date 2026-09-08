@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -149,7 +149,14 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
         row = conn.execute("SELECT version FROM schema_version").fetchone()
         if row is None:
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
-        # 未来迁移：根据 row['version'] 逐级升级
+        # v2：2.0 数据表 + requirements 新列（幂等）
+        from .v2.schema import REQUIREMENT_COLUMNS_V2, SCHEMA_V2
+        conn.executescript(SCHEMA_V2)
+        existing = {r["name"] for r in conn.execute("PRAGMA table_info(requirements)")}
+        for col, typ in REQUIREMENT_COLUMNS_V2.items():
+            if col not in existing:
+                conn.execute(f"ALTER TABLE requirements ADD COLUMN {col} {typ}")
+        conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         for k, v in defaults.items():
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
     finally:

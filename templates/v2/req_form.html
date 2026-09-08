@@ -1,0 +1,17 @@
+{% extends "v2/layout.html" %}
+{% block title %}{% if mode == 'new' %}新建需求{% else %}编辑需求{% endif %} · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{% if mode == 'new' %}新建需求{% else %}编辑需求{% endif %}</h1></div>
+<form method="post" action="{% if mode == 'new' %}/v2/req/new{% else %}/v2/req/{{ req.id }}/edit{% endif %}" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if page %}<input type="hidden" name="page_id" value="{{ page.id }}">{% if base_version_id %}<input type="hidden" name="base_version_id" value="{{ base_version_id }}">{% endif %}<div class="notice">将把页面「{{ page.app_name }} · {{ page.title }}」加入此需求。</div>{% endif %}
+  {% if mode == 'new' %}
+  <div class="field"><label>项目 <span class="req">*</span></label><div class="radios">{% for key, label in PROJECTS.items() %}<label class="radio"><input type="radio" name="project" value="{{ key }}" {% if project == key or (not project and loop.first) %}checked{% endif %} {% if page %}disabled{% endif %}> {{ label }}</label>{% endfor %}</div>{% if page %}<input type="hidden" name="project" value="{{ project }}">{% endif %}</div>
+  {% endif %}
+  <div class="field"><label>名称 <span class="req">*</span></label><input type="text" name="name" value="{{ req.name if req else '' }}" required maxlength="200"></div>
+  <div class="field"><label>Jira 单号</label><input type="text" name="jira_keys" value="{{ req.jira_keys if req else '' }}" placeholder="DC-85989 DC-86001"></div>
+  <div class="field"><label>负责人</label><div class="checks">{% for u in users %}<label class="check"><input type="checkbox" name="owners" value="{{ u.id }}" {% if u.id in owners %}checked{% endif %}> {{ u.name }}</label>{% endfor %}</div></div>
+  <div class="field"><label>需求说明</label><textarea name="notes" rows="5">{{ req.notes if req else '' }}</textarea></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary">{% if mode == 'new' %}创建{% else %}保存{% endif %}</button><a class="btn" href="{% if mode == 'new' %}/v2/req{% else %}/v2/req/{{ req.id }}{% endif %}">取消</a></div>
+</form>
+{% endblock %}

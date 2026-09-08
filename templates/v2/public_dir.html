@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ req.name }}</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/v2.css"></head>
+<body class="public-dir">
+<main class="wrap narrow">
+  <h1>{{ req.name }}</h1>
+  <p class="muted">{% for k in req.jira_keys|jira_keys %}<a class="jira" href="{{ jira_base_url }}/browse/{{ k }}" target="_blank" rel="noopener">{{ k }}</a> {% endfor %}{% if req_apps %}· {% for ra in req_apps %}{{ ra.app_name }}{% if ra.release_version %} {{ ra.release_version }}{% endif %}{% if not loop.last %}，{% endif %}{% endfor %}{% endif %}</p>
+  {% if req.notes %}<div class="card"><div class="notes">{{ req.notes|linkify }}</div></div>{% endif %}
+  <h3>涉及页面（{{ pages|length }}）</h3>
+  <ul class="dir-list">
+  {% for it in pages %}
+    <li><span>{% if it.proposal %}<a href="/p2/{{ req.share_code }}/{{ it.rp.page_id }}/">{{ it.rp.app_name }} · {{ it.rp.title }}</a>{% else %}{{ it.rp.app_name }} · {{ it.rp.title }} <span class="muted">（改稿未上传）</span>{% endif %}{% if it.rp.is_new %} <span class="tag tag-warn">新增</span>{% endif %}</span>
+      <span class="muted small">{% if it.diff and not it.diff.error %}{{ it.diff.changes|length }} 处改动{% endif %}</span></li>
+  {% endfor %}
+  </ul>
+</main>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{% macro menu_tree(items, current_id=None, open_all=False, show_ids=False, depth=0) -%}
+<ul class="mtree {% if depth == 0 %}root{% endif %}">
+{% for it in items %}
+  {% set n = it.node %}
+  <li data-title="{{ n.title|lower }} {{ (n.route_key or '')|lower }}">
+  {% if it.children %}
+    <details {% if depth < 1 or open_all %}open{% endif %}>
+      <summary>{{ n.title }}{% if show_ids %} <span class="muted small">#{{ n.id }}</span>{% endif %}{% if n.page_id %} <a class="leaf-link" href="/v2/p/{{ n.page_id }}">页</a>{% endif %}</summary>
+      {{ menu_tree(it.children, current_id, open_all, show_ids, depth + 1) }}
+    </details>
+  {% elif n.page_id %}
+    <a class="leaf {% if current_id == n.page_id %}active{% endif %}" href="/v2/p/{{ n.page_id }}">{{ n.title }}{% if show_ids %} <span class="muted small">#{{ n.id }}</span>{% endif %}{% if it.req_count %} <span class="cnt" title="有 {{ it.req_count }} 个需求改过此页">{{ it.req_count }}</span>{% endif %}</a>
+  {% else %}
+    <span class="leaf nopage" title="{{ n.route_key or '无路由' }}">{{ n.title }}{% if show_ids %} <span class="muted small">#{{ n.id }}</span>{% endif %}</span>
+  {% endif %}
+  </li>
+{% endfor %}
+</ul>
+{%- endmacro %}

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ page.title }} · {{ req.name }}</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/v2.css"></head>
+<body class="public-page">
+<main class="wrap v2">
+  <p class="crumbs"><a href="/p2/{{ req.share_code }}/">{{ req.name }}</a> › {{ page.title }}</p>
+  {% if proposals|length > 1 %}<p class="small muted">改稿历史：{% for p in proposals %}<a href="?v={{ p.id }}" {% if selected and p.id == selected.id %}style="font-weight:bold"{% endif %}>#{{ loop.index }} {{ fmt_dt(p.uploaded_at) }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  {% with content_base='/p2/' ~ req.share_code ~ '/c/', can_annotate=False, public=True, versions=None %}
+    {% include "v2/_viewer.html" %}
+  {% endwith %}
+</main>
+<script src="/static/v2.js"></script>
+</body>
+</html>

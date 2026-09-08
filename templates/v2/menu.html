@@ -1,0 +1,48 @@
+{% extends "v2/layout.html" %}
+{% from "v2/_menu_tree.html" import menu_tree %}
+{% block title %}{% if viewer %}{{ viewer.page.title }} · {% endif %}菜单视图 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="v2-layout">
+  <aside class="sidebar">
+    <div class="app-picker">
+      {% for g in groups %}
+        <div class="sys"><span class="tag tag-{{ g.system.project }}">{{ PROJECTS[g.system.project] }}</span> {{ g.system.name }}</div>
+        <ul class="apps">
+        {% for a in g.apps %}
+          <li><a href="/v2/?app={{ a.id }}" class="{% if app and app.id == a.id %}active{% endif %}">{{ a.name }} <span class="muted small">{{ a.page_count }} 页{% if a.latest_release %} · {{ a.latest_release }}{% endif %}</span></a></li>
+        {% else %}<li class="muted small">暂无端</li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">尚未配置系统与端。{% if is_admin %}<a href="/v2/admin">去配置</a>{% endif %}</p>
+      {% endfor %}
+    </div>
+    {% if app %}
+    <div class="tree-head">
+      <strong>{{ app.name }}</strong> <span class="muted small">{{ '截图' if app.renderer == 'image' else 'HTML' }}</span>
+      <input type="search" id="tree-filter" placeholder="搜索菜单 / 路由…">
+    </div>
+    <div class="tree-scroll">
+      {% set current_page = viewer.page if viewer else None %}
+      {{ menu_tree(tree_items, current_page.id if current_page else None) }}
+      {% if unlisted %}
+      <details class="unlisted"><summary>未挂菜单的页面 ({{ unlisted|length }})</summary>
+        <ul class="mtree">{% for p in unlisted %}<li data-title="{{ p.title|lower }} {{ p.route_key|lower }}"><a class="leaf {% if current_page and current_page.id == p.id %}active{% endif %}" href="/v2/p/{{ p.id }}">{{ p.title }}{% if p.is_new %} <span class="tag tag-warn">新增</span>{% endif %}</a></li>{% endfor %}</ul>
+      </details>
+      {% endif %}
+      {% if not tree_items and not unlisted %}<p class="muted small">该端还没有菜单与页面。{% if is_admin %}<a href="/v2/admin/apps/{{ app.id }}">导入菜单或快照</a>{% endif %}</p>{% endif %}
+    </div>
+    {% endif %}
+  </aside>
+  <section class="content">
+    {% if viewer %}
+      {% with page=viewer.page, versions=viewer.versions, selected=viewer.selected, base=viewer.base, diff=viewer.diff, annotations=viewer.annotations, others=viewer.others, menu_path=viewer.menu_path, content_base='/v2/content/', can_annotate=True, public=False %}
+        {% include "v2/_viewer.html" %}
+      {% endwith %}
+    {% else %}
+      <div class="empty tall">在左侧选择一个页面查看线上版本与需求变更历史。</div>
+    {% endif %}
+  </section>
+</div>
+<script src="/static/v2.js"></script>
+{% endblock %}

@@ -6,6 +6,15 @@
 - 技术栈：Python 3.12 · FastAPI · Jinja2 · SQLite（WAL）· uvicorn · Caddy（自动 HTTPS）· Docker Compose
 - 仓库公开，**任何密钥都不得提交**（`.env` 已在 `.gitignore`，模板见 `.env.example`）
 
+## 2.0：页面聚合式需求管理（预览）
+
+入口在「系统设置」页底部的 **DCPrd 2.0 预览**，或直接访问 `/v2/`。规格见 [SPEC-2.0.md](SPEC-2.0.md)。
+
+- **菜单视图** `/v2/`：项目 → 系统 → 端 → 菜单树 → 页面。每个页面有一条时间线：线上基线（来自 release 快照）与需求改稿；改稿自动与基线对比并在页面上圈出（HTML 用 DOM diff，Flutter Web 截图用像素 diff），可并排看基线、点改动清单定位、手动拖框批注。
+- **需求单视图** `/v2/req`：一个需求 = 一组页面改稿。从页面「基于此页发起改动」加入需求 → 下载基线 → 用 AI 改 → 上传改稿；支持新增页面（先挂到菜单树）、多端各填上线版本；导入对应版本快照时自动标记已上线。对外分享链接 `/p2/<码>/` 免登录展示目录与各页圈出结果。
+- **系统与端** `/v2/admin`（管理员）：维护系统/端、导入前端路由 JSON 生成菜单、导入 release 快照包（内容未变的页面自动去重）。
+- **快照工具** [tools/snap](tools/snap/README.md)：Playwright 脚本，按菜单逐页抓成自包含 HTML 或长截图并打包；给云桌面 AI 的操作提示词见 [tools/snap/PROMPT.md](tools/snap/PROMPT.md)。
+
 ## 目录结构
 
 ```
@@ -17,6 +26,8 @@ app/                FastAPI 应用
   web.py            请求上下文（登录态 / CSRF / flash / 模板渲染）
   queries.py        常用查询
   routes/           auth · requirements · documents · versions · admin · public
+  v2/               2.0：schema · queries · diff_html · diff_image · storage · snapshot · routes · public
+tools/snap/         页面快照工具（Playwright）
 templates/  static/ 服务端模板与自写 CSS/JS（无前端构建链）
 tests/              pytest 接口测试 + Playwright 端到端测试
 deploy/             install.sh · 自动更新脚本 · systemd unit
@@ -88,7 +99,7 @@ cp .env.example .env    # 本地把 DEV_MODE=1、DATA_DIR=./data、DOMAIN=localh
 
 ```bash
 .venv/bin/python -m pytest -q --ignore=tests/test_e2e.py     # 接口/单元测试
-.venv/bin/python -m pytest -q tests/test_e2e.py --browser chromium   # Playwright 端到端
+.venv/bin/python -m pytest -q tests/test_e2e.py tests/test_e2e_v2.py --browser chromium   # Playwright 端到端（1.0 与 2.0）
 ```
 
 ## 实现要点与取舍（SPEC 未细述处的决定）
@@ -102,6 +113,8 @@ cp .env.example .env    # 本地把 DEV_MODE=1、DATA_DIR=./data、DOMAIN=localh
 - **复合需求转换**不做反向；单体需求删除只删需求本身（其唯一文档随需求一起隐藏）。
 - **zip**：拒绝绝对路径 / `..`，跳过 `__MACOSX`、`.DS_Store`、`Thumbs.db`、符号链接；文件名按 utf-8 → gbk 顺序还原；单一顶层目录自动剥离；解压总量 ≤ 4×上传上限、文件数 ≤ 100000。
 - **公开文档**：`/s/` 为 `no-cache`，`/v/` 为一年 immutable；html 响应按 `<meta charset>` 输出 charset；沙箱开关默认开（CSP `sandbox` 不含 `allow-same-origin`）。
+- **2.0 数据**：`/data/v2/pages/<page_id>/<version_id>/page.html|png`；schema_version 2，启动时自动建表并给 requirements 补列（v2 需求 `kind='v2'`，1.0 列表过滤掉）。
+- **2.0 diff**：HTML 用 html5lib 解析成与浏览器一致的 DOM 树，按节点签名做序列对齐，输出 `nth-of-type` CSS 路径；标注脚本追加在 HTML 末尾、在浏览器内定位并画角标（iframe 沙箱下通过 postMessage 与父页面通信）；截图用 Pillow 像素差分 + 网格连通域聚合成矩形。
 - 时间统一存 UTC 字符串（`YYYY-MM-DDTHH:MM:SS`），展示时按系统设置的时区转换。
 
 ## 部署记录

@@ -40,7 +40,7 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
     project = project if project in PROJECTS else ""
     q = (q or "").strip()
     page = max(1, page)
-    where = ["r.deleted_at IS NULL"]
+    where = ["r.deleted_at IS NULL", "r.kind != 'v2'"]
     params: list = []
     if project:
         where.append("r.project = ?")
@@ -144,6 +144,8 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
 async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = queries.requirement_or_404(ctx.conn, req_id)
+    if req["kind"] == "v2":
+        return ctx.redirect(f"/v2/req/{req_id}")
     context = {
         "req": req,
         "owners": queries.owners_of(ctx.conn, req_id),

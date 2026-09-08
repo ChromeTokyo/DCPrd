@@ -1,0 +1,123 @@
+{# 页面查看器：内部与公开共用。变量：page, versions(可空), selected, base, diff, annotations, others, menu_path, content_base, can_annotate, public(bool), req(公开时) #}
+{% set sel = selected %}
+<div class="viewer" id="viewer" data-version="{{ sel.id if sel else '' }}" data-content-base="{{ content_base }}" data-can-annotate="{{ '1' if can_annotate else '0' }}" data-csrf="{{ csrf }}" data-media="{{ sel.media if sel else '' }}">
+  <div class="viewer-head">
+    <div>
+      <div class="crumbs small">{{ page.system_name }} › {{ page.app_name }}{% for m in menu_path %} › {{ m }}{% endfor %}</div>
+      <h2>{{ page.title }} <code>{{ page.route_key }}</code>{% if page.is_new %} <span class="tag tag-warn">新增页面</span>{% endif %}</h2>
+    </div>
+    <div class="actions">
+      {% if sel %}
+      <label class="check small"><input type="checkbox" id="toggle-diff" checked {% if not (sel.kind == 'proposal' and base) %}disabled{% endif %}> 圈出改动</label>
+      <label class="check small"><input type="checkbox" id="toggle-split" {% if not base %}disabled{% endif %}> 与基线并排</label>
+      {% if can_annotate %}<button type="button" class="btn btn-sm" id="toggle-annotate">＋ 手动圈选</button>{% endif %}
+      {% if not public %}<a class="btn btn-sm" href="/v2/download/{{ sel.id }}">下载此版本</a>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if versions is defined and versions %}
+  <div class="timeline">
+    {% for v in versions %}
+      <a class="tl {{ v.kind }} {% if sel and v.id == sel.id %}active{% endif %} {% if v.req_status == 'live' %}live{% endif %}" href="?v={{ v.id }}" title="{{ '基线 ' ~ (v.release_version or '') if v.kind == 'baseline' else '需求：' ~ (v.req_name or '') }} · {{ v.uploader_name or '快照' }} · {{ fmt_dt(v.uploaded_at) }}">
+        <span class="dot"></span>
+        <span class="lbl">{% if v.kind == 'baseline' %}线上 {{ v.release_version }}{% else %}{{ v.req_name or '需求' }}{% if v.req_status %} <em>{{ STATUS_LABELS.get(v.req_status, '') }}</em>{% endif %}{% endif %}</span>
+        <span class="when">{{ fmt_dt(v.uploaded_at, '%m-%d') }}</span>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not sel %}
+    <div class="empty">该页面还没有任何版本。{% if not public %}导入快照或在需求中上传改稿后即可查看。{% endif %}</div>
+  {% else %}
+  <div class="viewer-body">
+    <div class="stages" id="stages">
+      <div class="stage" data-role="new">
+        <div class="stage-title">{% if sel.kind == 'baseline' %}线上基线 {{ sel.release_version }}{% else %}改稿{% if sel.req_name %} · {{ sel.req_name }}{% endif %}{% endif %} <span class="muted small">{{ sel.uploader_name or '快照导入' }} · {{ fmt_dt(sel.uploaded_at) }}</span></div>
+        <div class="stage-inner">
+          {% if sel.media == 'html' %}
+          <iframe id="frame-new" class="page-frame" src="{{ content_base }}{{ sel.id }}?diff=1" sandbox="allow-scripts allow-forms allow-popups allow-modals" title="页面"></iframe>
+          {% else %}
+          <img id="img-new" class="page-img" src="{{ content_base }}{{ sel.id }}" alt="页面截图">
+          {% endif %}
+          <div class="ann-layer" id="ann-layer">
+            {% if sel.media == 'image' and diff and diff.changes %}
+              {% for c in diff.changes %}<div class="box auto" style="left:{{ (c.x / diff.width * 100)|round(3) }}%;top:{{ (c.y / diff.height * 100)|round(3) }}%;width:{{ (c.w / diff.width * 100)|round(3) }}%;height:{{ (c.h / diff.height * 100)|round(3) }}%" data-index="{{ loop.index0 }}"><span class="num">{{ loop.index }}</span></div>{% endfor %}
+            {% endif %}
+            {% for a in annotations %}<div class="box manual" data-id="{{ a.id }}" style="left:{{ (a.x * 100)|round(3) }}%;top:{{ (a.y * 100)|round(3) }}%;width:{{ (a.w * 100)|round(3) }}%;height:{{ (a.h * 100)|round(3) }}%" title="{{ a.text }} — {{ a.author }}"><span class="num">M{{ loop.index }}</span></div>{% endfor %}
+          </div>
+        </div>
+      </div>
+      {% if base %}
+      <div class="stage base" data-role="base" hidden>
+        <div class="stage-title">基线 {{ base.release_version or '' }} <span class="muted small">{{ fmt_dt(base.uploaded_at) }}</span></div>
+        <div class="stage-inner">
+          {% if base.media == 'html' %}<iframe id="frame-base" class="page-frame" data-src="{{ content_base }}{{ base.id }}" sandbox="allow-scripts allow-forms allow-popups allow-modals" title="基线"></iframe>
+          {% else %}<img class="page-img" src="{{ content_base }}{{ base.id }}" alt="基线截图">{% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <aside class="side">
+      {% if sel.kind == 'proposal' %}
+      <section class="side-sec">
+        <h4>需求</h4>
+        <p><strong>{{ sel.req_name or '' }}</strong>{% if sel.req_jira %}<br><span class="small">{% for k in sel.req_jira|jira_keys %}<a class="jira" href="{{ jira_base_url }}/browse/{{ k }}" target="_blank" rel="noopener">{{ k }}</a>{% endfor %}</span>{% endif %}</p>
+        <p class="small muted">改动人 {{ sel.uploader_name }} · {{ fmt_dt(sel.uploaded_at) }}{% if sel.note %}<br>{{ sel.note }}{% endif %}</p>
+        {% if not public and sel.requirement_id %}<a class="btn btn-sm" href="/v2/req/{{ sel.requirement_id }}">打开需求单</a>{% endif %}
+        {% if base %}<p class="small muted">基于线上 {{ base.release_version or '基线' }}</p>{% endif %}
+      </section>
+      <section class="side-sec">
+        <h4>自动圈出 {% if diff %}<span class="muted">({{ diff.changes|length }})</span>{% endif %}</h4>
+        {% if not diff %}<p class="muted small">无基线，未做对比。</p>
+        {% elif diff.error %}<p class="muted small">{{ diff.error }}</p>
+        {% else %}
+          {% if diff.ratio and diff.ratio > 0.6 %}<p class="small warn">改动面超过 60%，自动圈出可能不精确，建议手动圈选补充。</p>{% endif %}
+          {% if diff.size_changed %}<p class="small muted">两版尺寸不同，尾部区域可能被整体标记。</p>{% endif %}
+          <ol class="changes" id="change-list">
+          {% for c in diff.changes[:200] %}
+            <li data-index="{{ loop.index0 }}" class="chg {{ c.type }}"><span class="ct">{{ {'text':'文字','attr':'属性','added':'新增','removed':'删除','changed':'变化'}.get(c.type, c.type) }}</span> {{ c.label }}{% if c.type == 'text' %}<div class="small muted"><del>{{ c.old|truncate(60) }}</del> → {{ c.new|truncate(60) }}</div>{% elif c.type == 'removed' and c.removed %}<div class="small muted">删除了 {{ c.removed }}</div>{% elif c.type == 'attr' %}<div class="small muted">{{ c.attrs|join(', ') }}</div>{% endif %}</li>
+          {% endfor %}
+          </ol>
+          {% if diff.truncated %}<p class="muted small">仅显示前 200 项。</p>{% endif %}
+        {% endif %}
+      </section>
+      {% endif %}
+      {% if sel.kind == 'baseline' %}
+      <section class="side-sec"><h4>线上基线</h4><p>版本 <strong>{{ sel.release_version }}</strong><br><span class="small muted">导入于 {{ fmt_dt(sel.uploaded_at) }}</span></p></section>
+      {% endif %}
+      <section class="side-sec">
+        <h4>手动圈选 <span class="muted" id="ann-count">({{ annotations|length }})</span></h4>
+        <ul class="ann-list" id="ann-list">
+        {% for a in annotations %}<li data-id="{{ a.id }}"><span class="num">M{{ loop.index }}</span> {{ a.text or '（无说明）' }} <span class="muted small">{{ a.author }}</span>{% if can_annotate and (is_admin or (user and a.created_by == user.id)) %} <button type="button" class="btn-x ann-del" title="删除">×</button>{% endif %}</li>{% endfor %}
+        </ul>
+        {% if can_annotate %}<p class="muted small">点「手动圈选」后在页面上拖出矩形，输入说明即可。</p>{% endif %}
+      </section>
+      {% if others %}
+      <section class="side-sec">
+        <h4>同需求改动的其他页面</h4>
+        <ul class="others">{% for o in others %}<li><a href="{% if public %}/p2/{{ req.share_code }}/{{ o.id }}/{% else %}/v2/p/{{ o.id }}{% endif %}">{{ o.app_name }} · {{ o.title }}</a></li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+      {% if not public %}
+      <section class="side-sec">
+        <h4>基于此页发起改动</h4>
+        <form method="post" action="/v2/p/{{ page.id }}/start" class="form">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="base_version_id" value="{{ (sel.id if sel.kind == 'baseline' else (base.id if base else '')) }}">
+          <select name="req_id">
+            <option value="new">＋ 新建需求单…</option>
+            {% for r in my_reqs or [] %}<option value="{{ r.id }}">{{ r.name }}{% if r.jira_keys %}（{{ r.jira_keys }}）{% endif %}</option>{% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-primary">加入需求</button>
+        </form>
+        <p class="muted small">加入后在需求单里下载基线、修改、上传改稿。</p>
+        {% if is_admin %}<form method="post" action="/v2/version/{{ sel.id }}/delete" class="inline" data-confirm="确定删除该版本？"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn btn-sm btn-danger">删除此版本</button></form>{% endif %}
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+  {% endif %}
+</div>

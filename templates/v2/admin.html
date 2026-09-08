@@ -1,0 +1,45 @@
+{% extends "v2/layout.html" %}
+{% from "_macros.html" import confirm_form %}
+{% block title %}系统与端 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>系统与端</h1></div>
+<div class="two-col">
+<section class="card">
+  <h3>新建系统</h3>
+  <form method="post" action="/v2/admin/systems/new" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>项目</label><div class="radios">{% for key, label in PROJECTS.items() %}<label class="radio"><input type="radio" name="project" value="{{ key }}" {% if loop.first %}checked{% endif %}> {{ label }}</label>{% endfor %}</div></div>
+    <div class="field"><label>系统名称</label><input type="text" name="name" required placeholder="如：商户后台体系"></div>
+    <button class="btn btn-primary">创建</button>
+  </form>
+</section>
+<section class="card">
+  <h3>新建端（后台 / App）</h3>
+  <form method="post" action="/v2/admin/apps/new" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label>所属系统</label><select name="system_id" required>{% for g in groups %}<option value="{{ g.system.id }}">{{ PROJECTS[g.system.project] }} · {{ g.system.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>名称</label><input type="text" name="name" required placeholder="如：运营后台"></div>
+    <div class="field"><label>标识（快照包 manifest.app）</label><input type="text" name="key" required placeholder="如 eb-ops-admin"></div>
+    <div class="field"><label>类型</label><select name="kind"><option value="web">Web 后台（HTML 快照）</option><option value="flutter_web">Flutter Web（截图快照）</option><option value="h5">H5（HTML 快照）</option><option value="other">其他</option></select></div>
+    <div class="field"><label>UAT / 线上地址（选填）</label><input type="text" name="base_url"></div>
+    <button class="btn btn-primary">创建</button>
+  </form>
+</section>
+</div>
+{% for g in groups %}
+<section class="card">
+  <div class="page-head" style="margin-bottom:8px">
+    <h3><span class="tag tag-{{ g.system.project }}">{{ PROJECTS[g.system.project] }}</span> {{ g.system.name }} <span class="muted small">#{{ g.system.id }}</span></h3>
+    <div class="actions">
+      <form method="post" action="/v2/admin/systems/{{ g.system.id }}/edit" class="inline form-row"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="name" value="{{ g.system.name }}"><button class="btn btn-sm">改名</button></form>
+      {{ confirm_form('/v2/admin/systems/' ~ g.system.id ~ '/delete', csrf, '删除系统', '确定删除系统「' ~ g.system.name ~ '」？') }}
+    </div>
+  </div>
+  {% if g.apps %}
+  <table class="table"><thead><tr><th>端</th><th>标识</th><th>类型</th><th>页面数</th><th>最新版本</th><th></th></tr></thead><tbody>
+  {% for a in g.apps %}<tr><td><a href="/v2/admin/apps/{{ a.id }}">{{ a.name }}</a></td><td><code>{{ a.key }}</code></td><td>{{ a.kind }} / {{ '截图' if a.renderer == 'image' else 'HTML' }}</td><td>{{ a.page_count }}</td><td>{{ a.latest_release or '—' }}</td><td><a class="btn btn-sm" href="/v2/admin/apps/{{ a.id }}">管理</a> <a class="btn btn-sm" href="/v2/?app={{ a.id }}">浏览</a></td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="muted">还没有端。</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

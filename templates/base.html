@@ -6,6 +6,7 @@
 <title>{% block title %}{{ site_name }}{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css">
 {% if csrf %}<meta name="csrf" content="{{ csrf }}">{% endif %}
+{% block head %}{% endblock %}
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
 {% block nav %}
