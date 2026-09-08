@@ -108,3 +108,23 @@ def test_admin_pages_have_security_headers(superuser):
     r = superuser.get("/")
     assert r.headers["x-frame-options"] == "DENY"
     assert r.headers["referrer-policy"] == "same-origin"
+
+
+def test_session_never_expires(superuser, cfg):
+    import sqlite3
+    conn = sqlite3.connect(cfg.db_path)
+    conn.execute("UPDATE sessions SET created_at = '2000-01-01T00:00:00', last_seen = '2000-01-01T00:00:00'")
+    conn.commit(); conn.close()
+    r = superuser.get("/", follow_redirects=False)
+    assert r.status_code == 200
+    # 访问时滑动续期，重新下发 Cookie
+    assert any(c.startswith("dcpm_sid=") and "Max-Age=34560000" in c for c in r.headers.get_list("set-cookie"))
+
+
+def test_single_sign_on_kicks_previous_session(superuser, client_factory):
+    assert superuser.get("/", follow_redirects=False).status_code == 200
+    other_device = client_factory()
+    assert login(other_device, 1001, "Super").status_code == 302
+    assert other_device.get("/", follow_redirects=False).status_code == 200
+    # 旧设备被踢出
+    assert superuser.get("/", follow_redirects=False).status_code == 302

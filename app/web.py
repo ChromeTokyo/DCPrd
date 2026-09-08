@@ -25,7 +25,9 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 SESSION_COOKIE = "dcpm_sid"
 FLASH_COOKIE = "dcpm_flash"
 INVITE_COOKIE = "dcpm_invite"
-SESSION_DAYS = 30
+# 会话永不过期：只有手动退出、被解绑/删除用户才失效。Cookie 按浏览器上限（400 天）设置并在每次访问时滑动续期。
+COOKIE_MAX_AGE = 400 * 86400
+SESSION_FOREVER = "9999-12-31T00:00:00"
 PROJECTS = {"eb": "EB", "im": "IM", "tk": "TK"}
 
 _URL_RE = re.compile(r"(https?://[^\s<>\"']+)")
@@ -148,37 +150,36 @@ class Ctx:
     # --- 登录态 ---
     def _load_user(self) -> None:
         raw = self.request.cookies.get(SESSION_COOKIE)
-        sid = self.signer.loads(raw, salt="session", max_age=SESSION_DAYS * 86400 + 3600)
+        sid = self.signer.loads(raw, salt="session", max_age=None)
         if not sid:
             return
         sess = db.one(self.conn, "SELECT * FROM sessions WHERE id = ?", (sid,))
         if not sess:
             return
         now = db.utcnow()
-        if sess["expires_at"] <= now:
-            self.conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
-            return
         user = db.one(self.conn, "SELECT * FROM users WHERE id = ? AND deleted_at IS NULL AND tg_id IS NOT NULL", (sess["user_id"],))
         if not user:
             self.conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
             return
-        if sess["last_seen"] < (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S"):
+        if sess["last_seen"] < (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S"):
             self.conn.execute("UPDATE sessions SET last_seen = ? WHERE id = ?", (now, sid))
+            self._pending_cookies.append((SESSION_COOKIE, self._session_cookie(raw)))  # 滑动续期
         self.user = user
         self.session = sess
 
+    def _session_cookie(self, value: str) -> dict[str, Any]:
+        return {"value": value, "max_age": COOKIE_MAX_AGE, "httponly": True, "samesite": "lax", "secure": not self.cfg.dev_mode, "path": "/"}
+
     def login(self, user_id: int) -> None:
+        # 单点登录：同一账号只保留一个有效会话，新登录即踢掉其他设备
+        self.conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         sid = new_session_id()
-        now = dt.datetime.now(dt.timezone.utc)
-        exp = (now + dt.timedelta(days=SESSION_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
         db.insert(
             self.conn,
             "sessions",
-            {"id": sid, "user_id": user_id, "csrf": new_csrf(), "created_at": db.utcnow(), "expires_at": exp, "last_seen": db.utcnow()},
+            {"id": sid, "user_id": user_id, "csrf": new_csrf(), "created_at": db.utcnow(), "expires_at": SESSION_FOREVER, "last_seen": db.utcnow()},
         )
-        self._pending_cookies.append(
-            (SESSION_COOKIE, {"value": self.signer.dumps(sid, salt="session"), "max_age": SESSION_DAYS * 86400, "httponly": True, "samesite": "lax", "secure": not self.cfg.dev_mode, "path": "/"})
-        )
+        self._pending_cookies.append((SESSION_COOKIE, self._session_cookie(self.signer.dumps(sid, salt="session"))))
 
     def logout(self) -> None:
         if self.session:

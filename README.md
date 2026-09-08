@@ -95,7 +95,9 @@ cp .env.example .env    # 本地把 DEV_MODE=1、DATA_DIR=./data、DOMAIN=localh
 
 - **上传限流**：中间件先按 `Content-Length` 拒绝超限请求（413），随后把文件按 1MB 分块边读边写临时文件并计数，超限即中止；Caddy 另有 400MB 请求体上限。
 - **每请求一个 SQLite 连接**，`isolation_level=None`（自动提交）+ `busy_timeout=10s`，WAL 模式；schema 用 `CREATE TABLE IF NOT EXISTS` + `schema_version`。
-- **会话**：`sessions` 表 + 签名 Cookie（`HttpOnly; SameSite=Lax; Secure`，`DEV_MODE=1` 时不加 Secure），30 天；解绑/删除用户即删其全部会话。
+- **单点登录**：同一账号只保留一个有效会话，在另一处登录后原设备立即退出。
+- **会话永不过期**（需求方 2026-09-08 决定，覆盖 SPEC 的 30 天）：`sessions` 表 + 签名 Cookie（`HttpOnly; SameSite=Lax; Secure`，`DEV_MODE=1` 时不加 Secure），Cookie 按浏览器上限 400 天下发并在访问时滑动续期；只有手动退出、被解绑/删除用户才失效。
+- **分享链接固定不变**：上传新版本不改变 `/s/<code>/`，旧链接始终指向最新版；历史版本用 `/v/<code>/<n>/`（后台版本表可复制）。只有明确点「重置分享链接」才会换码。
 - **删除用户**为软删除（保留其在版本记录、审计日志中的姓名），并解除 Telegram 绑定、移出负责人列表。
 - **复合需求转换**不做反向；单体需求删除只删需求本身（其唯一文档随需求一起隐藏）。
 - **zip**：拒绝绝对路径 / `..`，跳过 `__MACOSX`、`.DS_Store`、`Thumbs.db`、符号链接；文件名按 utf-8 → gbk 顺序还原；单一顶层目录自动剥离；解压总量 ≤ 4×上传上限、文件数 ≤ 100000。
