@@ -34,6 +34,17 @@ async def handle_upload(ctx: Ctx, doc, upload: UploadFile | None, note: str) -> 
         await upload.close()
     db.update(ctx.conn, "documents", doc["id"], {"updated_at": db.utcnow()})
     queries.touch_requirement(ctx.conn, doc["requirement_id"], ctx.user["id"])
+    vid, needs_entry = result
+    if not needs_entry:
+        from ..notify import notify_requirement
+        ver = db.one(ctx.conn, "SELECT number FROM versions WHERE id = ?", (vid,))
+        req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ?", (doc["requirement_id"],))
+        title = req["name"] if req["kind"] == "single" else f"{req['name']} · {doc['name']}"
+        text = f"【{ctx.settings.get('site_name') or 'DCPrd'}】{ctx.user['name']} 上传了「{title}」v{ver['number']}"
+        if note and note.strip():
+            text += f"\n说明：{note.strip()[:200]}"
+        text += f"\n{ctx.base_url}/req/{doc['requirement_id']}"
+        notify_requirement(ctx.conn, ctx.notifier, doc["requirement_id"], text, exclude_user_id=ctx.user["id"])
     return result
 
 
@@ -51,10 +62,19 @@ async def doc_detail(doc_id: int, ctx: Ctx = Depends(get_ctx)):
     doc, req = queries.document_or_404(ctx.conn, doc_id)
     if req["kind"] == "single":
         return ctx.redirect(f"/req/{req['id']}")
+    from .extras import record_view
+    record_view(ctx, req["id"])
+    comments = db.all_rows(
+        ctx.conn,
+        """SELECT c.*, d.name AS doc_name, d.id AS doc_id, u.name AS resolver FROM comments c JOIN documents d ON d.id = c.document_id
+           LEFT JOIN users u ON u.id = c.resolved_by WHERE c.document_id = ? AND c.deleted_at IS NULL ORDER BY c.resolved_at IS NOT NULL, c.id DESC""",
+        (doc["id"],),
+    )
     return ctx.render(
         "doc_detail.html",
         doc=doc,
         req=req,
+        comments=comments,
         versions=queries.versions_of(ctx.conn, doc["id"]),
         latest=queries.latest_version(ctx.conn, doc["id"]),
         can_delete=can_delete(ctx, doc),

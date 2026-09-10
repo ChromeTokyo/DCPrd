@@ -119,6 +119,41 @@ def test_full_flow(browser, live_url):
     txt = panel.inner_text()
     assert "支付流程改版" in txt and "负责人" in txt and "v2" in txt and "v1" in txt and "DC-85989" in txt
     assert anon.locator("#dcpm-widget-host .vs li").count() == 2
+    # 留言页签：沙箱页（opaque origin）里跨域提交留言，后台能看到并有 Telegram 通知记录
+    anon.click("#dcpm-widget-host .tabs button:has-text('留言')")
+    anon.fill("#dcpm-widget-host .cf input", "测试同学")
+    anon.fill("#dcpm-widget-host .cf textarea", "第二步按钮点不动")
+    anon.click("#dcpm-widget-host .cf button")
+    anon.locator("#dcpm-widget-host .cl li:has-text('第二步按钮点不动')").wait_for()
+    assert "1" in anon.locator("#dcpm-widget-host .tabs .badge").inner_text()
+    anon.reload()
+    anon.click("#dcpm-widget-host .pill")
+    anon.click("#dcpm-widget-host .tabs button:has-text('留言')")
+    anon.locator("#dcpm-widget-host .cl li:has-text('测试同学')").wait_for()
+    admin.goto(req1_url)
+    assert "测试同学" in admin.locator("#comments").inner_text() and "1 条待处理" in admin.locator("#comments").inner_text()
+    admin.click("#comments button:has-text('标记已处理')")
+    admin.wait_for_url(req1_url)
+    assert "已处理" in admin.locator("#comments").inner_text()
+    # 收藏 + 最近访问
+    admin.click("h1 .fav")
+    admin.wait_for_url(req1_url)
+    admin.goto(f"{base_url}/")
+    assert "我的收藏" in admin.content() and "最近访问" in admin.content()
+    # 上传前预览：选文件 → 预览按钮 → 弹层 iframe 渲染
+    admin.goto(req1_url)
+    admin.set_input_files("section.card input[name=file]", {"name": "v3.html", "mimeType": "text/html", "buffer": b"<h1 id='pv'>preview me</h1>"})
+    admin.click("section.card .preview-btn")
+    assert admin.locator("#preview-modal").is_visible()
+    admin.frame_locator("#preview-frame").locator("#pv").wait_for()
+    assert admin.frame_locator("#preview-frame").locator("#pv").inner_text() == "preview me"
+    admin.click("#preview-close")
+    # 导出
+    with admin.expect_download() as dl:
+        admin.click("a:has-text('导出 zip')")
+    assert dl.value.suggested_filename.endswith(".zip")
+    anon.goto(public1)
+    anon.click("#dcpm-widget-host .pill")
     anon.click("#dcpm-widget-host .vs li:has-text('v1') a")
     anon.wait_for_url(re.compile(r"/v/[a-z0-9]{12}/1/"))
     assert anon.locator("#t").inner_text() == "版本一"

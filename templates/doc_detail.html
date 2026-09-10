@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import project_tag, copy_btn, share_box, confirm_form, upload_form, version_table %}
+{% from "_macros.html" import project_tag, copy_btn, share_box, confirm_form, upload_form, version_table, comments_section %}
 {% block title %}{{ doc.name }} · {{ req.name }} · {{ site_name }}{% endblock %}
 {% block content %}
 <p class="crumbs"><a href="/">需求列表</a> › <a href="/req/{{ req.id }}">{{ project_tag(req.project) }} {{ req.name }}</a> › {{ doc.name }}</p>
@@ -22,4 +22,5 @@
 {% if latest %}<p class="muted">当前公开的是 v{{ latest.number }}（{{ latest.uploader_name }} · {{ fmt_dt(latest.uploaded_at) }}）</p>{% else %}<p class="muted">尚无已发布版本，分享链接暂时返回 404。</p>{% endif %}
 {{ version_table(versions, doc, base_url, csrf, is_admin, fmt_dt) }}
 {{ upload_form('/doc/' ~ doc.id ~ '/upload', csrf) }}
+{{ comments_section(comments, csrf, '/doc/' ~ doc.id, fmt_dt, is_admin or req.created_by == user.id) }}
 {% endblock %}

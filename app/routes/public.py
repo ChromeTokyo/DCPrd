@@ -10,7 +10,7 @@ import markdown
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import db, queries
 from ..public_widget import inject_widget
@@ -96,6 +96,7 @@ def _widget_data(ctx: Ctx, doc, ver) -> dict | None:
         "current": ver["number"],
         "latest": latest,
         "latestUrl": f"/s/{doc['share_code']}/",
+        "commentsUrl": f"/s/{doc['share_code']}/__comments",
         "updated": ctx.fmt_dt(versions[0]["uploaded_at"]) if versions else "",
         "versions": [{"n": v["number"], "time": ctx.fmt_dt(v["uploaded_at"]), "by": v["uploader"] or "", "note": v["note"] or "", "url": f"/v/{doc['share_code']}/{v['number']}/"} for v in versions],
     }
@@ -164,6 +165,61 @@ def _serve_version(ctx: Ctx, doc, ver, rel: str, prefix: str, cache: str) -> Res
         if path is None:
             raise HTTPException(404, "文件不存在")
     return _serve(ctx, path, cache, widget)
+
+
+# ---------- 公开留言（免登录；页面在沙箱内为 opaque origin，需允许跨域） ----------
+_CORS = {"access-control-allow-origin": "*", "cache-control": "no-store"}
+_rate: dict[str, list[float]] = {}
+COMMENT_LIMIT_PER_10MIN = 10
+
+
+def _rate_ok(ip: str) -> bool:
+    import time as _t
+    now = _t.time()
+    hits = [t for t in _rate.get(ip, []) if now - t < 600]
+    if len(hits) >= COMMENT_LIMIT_PER_10MIN:
+        _rate[ip] = hits
+        return False
+    hits.append(now)
+    _rate[ip] = hits
+    return True
+
+
+def _comment_json(ctx: Ctx, c) -> dict:
+    return {"id": c["id"], "author": c["author"], "body": c["body"], "version": c["version_number"], "time": ctx.fmt_dt(c["created_at"]), "resolved": bool(c["resolved_at"])}
+
+
+@router.get("/s/{code}/__comments")
+async def public_comments_list(code: str, ctx: Ctx = Depends(get_ctx)):
+    doc = _doc_by_code(ctx, code)
+    if not doc:
+        raise HTTPException(404, "链接无效")
+    rows = db.all_rows(ctx.conn, "SELECT * FROM comments WHERE document_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 200", (doc["id"],))
+    return JSONResponse([_comment_json(ctx, c) for c in rows], headers=_CORS)
+
+
+@router.post("/s/{code}/__comments")
+async def public_comments_create(code: str, request: Request, ctx: Ctx = Depends(get_ctx)):
+    doc = _doc_by_code(ctx, code)
+    if not doc:
+        raise HTTPException(404, "链接无效")
+    form = await request.form()
+    author = str(form.get("author") or "").strip()[:40]
+    body = str(form.get("body") or "").strip()[:2000]
+    version = str(form.get("version") or "")
+    if not author or not body:
+        return JSONResponse({"error": "请填写名字和留言内容"}, status_code=400, headers=_CORS)
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "") or "").split(",")[0].strip()
+    if not _rate_ok(ip or "?"):
+        return JSONResponse({"error": "留言太频繁，请稍后再试"}, status_code=429, headers=_CORS)
+    cid = db.insert(ctx.conn, "comments", {"document_id": doc["id"], "version_number": int(version) if version.isdigit() else None, "author": author, "body": body, "ip": ip, "created_at": db.utcnow()})
+    req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ?", (doc["requirement_id"],))
+    if req:
+        from ..notify import notify_requirement
+        title = req["name"] if req["kind"] == "single" else f"{req['name']} · {doc['name']}"
+        notify_requirement(ctx.conn, ctx.notifier, req["id"], f"【{ctx.settings.get('site_name') or 'DCPrd'}】{author} 在「{title}」留言：\n{body[:300]}\n{ctx.base_url}/req/{req['id']}#comments")
+    c = db.one(ctx.conn, "SELECT * FROM comments WHERE id = ?", (cid,))
+    return JSONResponse(_comment_json(ctx, c), headers=_CORS)
 
 
 @router.get("/s/{code}")

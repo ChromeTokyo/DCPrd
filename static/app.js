@@ -58,3 +58,31 @@
     kc.addEventListener('change', sync); ks.addEventListener('change', sync); sync();
   }
 })();
+
+// 上传前预览：POST /preview 取渲染结果放进沙箱 iframe
+(function () {
+  var modal = document.getElementById('preview-modal');
+  if (!modal) return;
+  var frame = document.getElementById('preview-frame'), title = document.getElementById('preview-title');
+  var csrfMeta = document.querySelector('meta[name=csrf]');
+  document.querySelectorAll('input[type=file][data-previewable]').forEach(function (input) {
+    var btn = input.parentElement.querySelector('.preview-btn');
+    if (!btn) return;
+    input.addEventListener('change', function () { btn.hidden = !input.files.length; });
+    btn.addEventListener('click', function () {
+      var f = input.files[0]; if (!f) return;
+      var fd = new FormData(); fd.append('file', f); fd.append('csrf', csrfMeta ? csrfMeta.content : '');
+      title.textContent = '预览：' + f.name + '（' + Math.round(f.size / 1024) + ' KB）';
+      frame.removeAttribute('srcdoc'); frame.srcdoc = '<p style="font:14px sans-serif;padding:20px;color:#666">加载中…</p>';
+      modal.hidden = false;
+      fetch('/preview', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(function (html) { frame.srcdoc = html; })
+        .catch(function (e) { frame.srcdoc = '<p style="font:14px sans-serif;padding:20px;color:#991b1b">预览失败：' + e.message + '</p>'; });
+    });
+  });
+  function close() { modal.hidden = true; frame.srcdoc = ''; }
+  document.getElementById('preview-close').addEventListener('click', close);
+  modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();

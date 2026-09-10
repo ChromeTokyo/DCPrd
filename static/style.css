@@ -127,3 +127,28 @@ body.public-dir{background:#f5f6f8}
 .pd-name a{color:var(--text)}
 .pd-item .btn{flex:none}
 @media (max-width:600px){.pd-head{padding-top:20px}.pd-item{padding:12px}}
+
+/* 收藏 / 最近 */
+.quick{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.quick-sec{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.quick-label{color:var(--muted);font-size:12px;margin-right:4px;white-space:nowrap}
+.quick-item{background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 6px;color:#374151;font-size:13px}
+.quick-item:hover{border-color:var(--primary);text-decoration:none}
+.fav{color:#d1d5db;font-size:16px;line-height:1;padding:0 4px}
+.fav.on{color:#f59e0b}
+.fav-big{font-size:22px;vertical-align:middle}
+.favcell{width:28px;padding-right:0!important}
+.cmt{font-size:12px;color:#92400e;background:#fef3c7;border-radius:10px;padding:1px 7px;margin-left:4px}
+.notify-tip{margin-top:24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+/* 留言 */
+.comments{list-style:none;margin:0;padding:0}
+.comments li{padding:10px 0;border-bottom:1px solid var(--line)}
+.comments li:last-child{border-bottom:none}
+.comments li.resolved{opacity:.6}
+.c-body{white-space:pre-wrap;margin:4px 0 6px}
+.c-actions{display:flex;gap:6px}
+/* 上传预览 */
+.preview-box{width:min(1100px,94vw);height:min(86vh,900px);display:flex;flex-direction:column;padding:12px 14px}
+.preview-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+#preview-frame{flex:1;width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}
+.preview-btn{margin-left:8px}

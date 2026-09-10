@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -119,6 +119,35 @@ CREATE TABLE IF NOT EXISTS requirement_tags (
     tag_id         INTEGER NOT NULL,
     PRIMARY KEY (requirement_id, tag_id)
 );
+
+CREATE TABLE IF NOT EXISTS favorites (
+    user_id        INTEGER NOT NULL,
+    requirement_id INTEGER NOT NULL,
+    created_at     TEXT NOT NULL,
+    PRIMARY KEY (user_id, requirement_id)
+);
+
+CREATE TABLE IF NOT EXISTS recent_views (
+    user_id        INTEGER NOT NULL,
+    requirement_id INTEGER NOT NULL,
+    viewed_at      TEXT NOT NULL,
+    PRIMARY KEY (user_id, requirement_id)
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id    INTEGER NOT NULL,
+    version_number INTEGER,
+    author         TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    ip             TEXT,
+    created_at     TEXT NOT NULL,
+    resolved_at    TEXT,
+    resolved_by    INTEGER,
+    deleted_at     TEXT,
+    deleted_by     INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_comments_doc ON comments(document_id, id);
 
 CREATE TABLE IF NOT EXISTS audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -134,6 +134,8 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     app = FastAPI(title="DCPrd", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.cfg = cfg
     app.state.signer = Signer(cfg.secret_key)
+    from .notify import Notifier
+    app.state.notifier = Notifier(cfg.tg_bot_token, dry_run=cfg.dev_mode or "TEST" in cfg.tg_bot_token.upper())
     app.state.jinja = build_env()
 
     def upload_limit_probe() -> int:
@@ -171,9 +173,9 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def healthz():
         return {"ok": True, "version": cfg.app_version}
 
-    from .routes import admin, auth, documents, public, requirements, versions
+    from .routes import admin, auth, documents, extras, public, requirements, versions
 
-    for mod in (auth, requirements, documents, versions, admin, public):
+    for mod in (auth, requirements, documents, versions, admin, extras, public):
         app.include_router(mod.router)
     from .v2 import public as v2_public
     from .v2 import routes as v2_routes

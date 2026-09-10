@@ -18,6 +18,30 @@
 {% else %}<span class="muted small">尚无标签，管理员可在「标签管理」中定义。</span>{% endif %}
 {%- endmacro %}
 
+{% macro fav_btn(req_id, fav, csrf, back, cls='btn btn-sm') -%}
+<form method="post" action="/req/{{ req_id }}/fav" class="inline fav-form"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ back }}"><button type="submit" class="{{ cls }} fav {% if fav %}on{% endif %}" title="{% if fav %}取消收藏{% else %}收藏{% endif %}">{% if fav %}★{% else %}☆{% endif %}</button></form>
+{%- endmacro %}
+
+{% macro comments_section(comments, csrf, back, fmt_dt, can_delete_any, show_doc=False) -%}
+<section class="card" id="comments">
+  <h3>留言 <span class="muted">({{ comments|length }}{% set open = comments|rejectattr('resolved_at')|list %}{% if open %} · {{ open|length }} 条待处理{% endif %})</span></h3>
+  {% if comments %}
+  <ul class="comments">
+  {% for c in comments %}
+    <li class="{% if c.resolved_at %}resolved{% endif %}">
+      <div class="c-head"><strong>{{ c.author }}</strong> <span class="muted small">{{ fmt_dt(c.created_at) }}{% if show_doc %} · {{ c.doc_name }}{% endif %}{% if c.version_number %} · v{{ c.version_number }}{% endif %}{% if c.resolved_at %} · 已处理（{{ c.resolver or '' }}）{% endif %}</span></div>
+      <div class="c-body">{{ c.body|linkify }}</div>
+      <div class="c-actions">
+        <form method="post" action="/comments/{{ c.id }}/resolve" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ back }}"><button class="btn btn-sm">{% if c.resolved_at %}重新打开{% else %}标记已处理{% endif %}</button></form>
+        {% if can_delete_any %}{{ confirm_form('/comments/' ~ c.id ~ '/delete', csrf, '删除', '确定删除这条留言？') }}{% endif %}
+      </div>
+    </li>
+  {% endfor %}
+  </ul>
+  {% else %}<p class="muted">还没有留言。看文档的人可以在分享页右下角的小菜单里留言，负责人会收到 Telegram 通知。</p>{% endif %}
+</section>
+{%- endmacro %}
+
 {% macro jira_links(text, jira_base_url) -%}
 {% for k in text|jira_keys %}<a class="jira" href="{{ jira_base_url }}/browse/{{ k }}" target="_blank" rel="noopener">{{ k }}</a>{% if not loop.last %} {% endif %}{% endfor %}
 {%- endmacro %}
@@ -51,7 +75,8 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="field">
       <label>文件（.html / .zip / 图片 / .md）</label>
-      <input type="file" name="file" accept=".html,.htm,.zip,.png,.jpg,.jpeg,.gif,.webp,.md" required>
+      <input type="file" name="file" accept=".html,.htm,.zip,.png,.jpg,.jpeg,.gif,.webp,.md" required data-previewable>
+      <button type="button" class="btn btn-sm preview-btn" hidden>预览</button>
     </div>
     <div class="field">
       <label>本次更新说明（可选）</label>

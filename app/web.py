@@ -112,6 +112,10 @@ class Ctx:
         return self.request.app.state.signer
 
     @property
+    def notifier(self):
+        return self.request.app.state.notifier
+
+    @property
     def tz(self) -> ZoneInfo:
         try:
             return ZoneInfo(self.settings.get("timezone") or self.cfg.timezone)

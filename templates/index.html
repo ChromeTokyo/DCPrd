@@ -1,21 +1,28 @@
 {% extends "base.html" %}
-{% from "_macros.html" import project_tag, kind_tag, jira_links, copy_btn, tag_chip %}
+{% from "_macros.html" import project_tag, kind_tag, jira_links, copy_btn, tag_chip, fav_btn %}
 {% block title %}需求列表 · {{ site_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>需求列表</h1>
   <a class="btn btn-primary" href="/req/new">新建需求</a>
 </div>
+{% if favorites or recents %}
+<div class="quick">
+  {% if favorites %}<div class="quick-sec"><span class="quick-label">★ 我的收藏</span>{% for r in favorites %}<a class="quick-item" href="/req/{{ r.id }}">{{ project_tag(r.project) }} {{ r.name }}</a>{% endfor %}</div>{% endif %}
+  {% if recents %}<div class="quick-sec"><span class="quick-label">最近访问</span>{% for r in recents %}<a class="quick-item" href="/req/{{ r.id }}" title="{{ fmt_dt(r.viewed_at) }}">{{ project_tag(r.project) }} {{ r.name }}</a>{% endfor %}</div>{% endif %}
+</div>
+{% endif %}
 <div class="toolbar">
   <nav class="tabs">
-    <a href="/?q={{ q|urlquote }}" class="{% if not project %}active{% endif %}">全部</a>
+    <a href="/?q={{ q|urlquote }}{% if fav %}&fav=1{% endif %}" class="{% if not project %}active{% endif %}">全部</a>
     {% for key, label in PROJECTS.items() %}
-    <a href="/?project={{ key }}&q={{ q|urlquote }}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ label }}</a>
+    <a href="/?project={{ key }}&q={{ q|urlquote }}{% if fav %}&fav=1{% endif %}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ label }}</a>
     {% endfor %}
   </nav>
+  <a class="btn {% if fav %}btn-primary{% endif %}" href="/?project={{ project }}&q={{ q|urlquote }}{% if not fav %}&fav=1{% endif %}">★ 只看收藏</a>
   <form method="get" action="/" class="search">
     {% if project %}<input type="hidden" name="project" value="{{ project }}">{% endif %}
-    {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+    {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}{% if fav %}<input type="hidden" name="fav" value="1">{% endif %}
     <input type="search" name="q" value="{{ q }}" placeholder="搜索名称 / Jira 单号 / 负责人 / 标签">
     <button class="btn" type="submit">搜索</button>
   </form>
@@ -29,12 +36,13 @@
 {% if items %}
 <div class="table-wrap">
 <table class="table reqs">
-  <thead><tr><th>名称</th><th>Jira</th><th>负责人</th><th>最新版本</th><th>分享</th><th>更新时间</th></tr></thead>
+  <thead><tr><th></th><th>名称</th><th>Jira</th><th>负责人</th><th>最新版本</th><th>分享</th><th>更新时间</th></tr></thead>
   <tbody>
   {% for it in items %}
   {% set r = it.req %}
   <tr>
-    <td class="name">{{ project_tag(r.project) }} <a href="/req/{{ r.id }}">{{ r.name }}</a> {% for t in it.tags %}{{ tag_chip(t, '/?project=' ~ project ~ '&tag=' ~ t.id) }} {% endfor %}{{ kind_tag(r.kind) }}{% if r.kind == 'compound' %} <span class="muted small">{{ r.doc_count }} 份子文档</span>{% endif %}</td>
+    <td class="favcell">{{ fav_btn(r.id, it.fav, csrf, request.url.path ~ ('?' ~ request.url.query if request.url.query else ''), 'btn-link') }}</td>
+    <td class="name">{{ project_tag(r.project) }} <a href="/req/{{ r.id }}">{{ r.name }}</a>{% if it.open_comments %} <a class="cmt" href="/req/{{ r.id }}#comments" title="{{ it.open_comments }} 条待处理留言">💬 {{ it.open_comments }}</a>{% endif %} {% for t in it.tags %}{{ tag_chip(t, '/?project=' ~ project ~ '&tag=' ~ t.id) }} {% endfor %}{{ kind_tag(r.kind) }}{% if r.kind == 'compound' %} <span class="muted small">{{ r.doc_count }} 份子文档</span>{% endif %}</td>
     <td class="jira-cell">{{ jira_links(r.jira_keys, jira_base_url) }}</td>
     <td>{{ r.owner_names or '' }}</td>
     <td class="latest">{% if it.latest %}v{{ it.latest.number }}{% if r.kind == 'compound' %} <span class="muted">{{ it.latest.doc_name }}</span>{% endif %} · {{ it.latest.uploader_name or '（已删除用户）' }} · {{ fmt_dt(it.latest.uploaded_at) }}{% else %}<span class="muted">暂无</span>{% endif %}</td>
@@ -53,6 +61,8 @@
 </nav>
 {% endif %}
 {% else %}
-<div class="empty">{% if q or project %}没有匹配的需求。{% else %}还没有需求，<a href="/req/new">新建一个</a>。{% endif %}</div>
+<div class="empty">{% if q or project or fav or tag %}没有匹配的需求。{% else %}还没有需求，<a href="/req/new">新建一个</a>。{% endif %}</div>
 {% endif %}
+<p class="muted small notify-tip">Telegram 通知：在 Telegram 里打开 <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener">@{{ bot_username }}</a> 并点 Start 后，你负责或创建的需求有新版本、有留言时会收到提醒。
+<form method="post" action="/me/notify-test" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/"><button class="btn btn-sm">发送测试消息</button></form></p>
 {% endblock %}

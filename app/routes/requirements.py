@@ -12,6 +12,7 @@ from ..security import new_share_code
 from ..storage import UploadError
 from ..web import PROJECTS, Ctx
 from .documents import can_delete, handle_upload
+from .extras import comments_for_requirement, fav_ids, favorites_list, is_fav, open_comment_counts, recent_list, record_view
 
 router = APIRouter()
 PAGE_SIZE = 50
@@ -35,13 +36,16 @@ def _set_owners(ctx: Ctx, req_id: int, owner_ids: list[int]) -> None:
 
 
 @router.get("/")
-async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", page: int = 1, tag: int | None = None):
+async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", page: int = 1, tag: int | None = None, fav: int = 0):
     ctx.require_user()
     project = project if project in PROJECTS else ""
     q = (q or "").strip()
     page = max(1, page)
     where = ["r.deleted_at IS NULL", "r.kind != 'v2'"]
     params: list = []
+    if fav:
+        where.append("EXISTS (SELECT 1 FROM favorites f WHERE f.requirement_id = r.id AND f.user_id = ?)")
+        params.append(ctx.user["id"])
     if project:
         where.append("r.project = ?")
         params.append(project)
@@ -68,6 +72,8 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
         [*params, PAGE_SIZE, (page - 1) * PAGE_SIZE],
     )
     tag_map = queries.tags_for_requirements(ctx.conn, [r["id"] for r in rows])
+    favs = fav_ids(ctx)
+    open_comments = open_comment_counts(ctx, [r["id"] for r in rows])
     items = []
     for r in rows:
         latest = queries.requirement_latest(ctx.conn, r["id"])
@@ -76,7 +82,7 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
             share = f"/s/{doc['share_code']}/" if doc else None
         else:
             share = f"/s/{r['share_code']}/"
-        items.append({"req": r, "latest": latest, "share": share, "tags": tag_map.get(r["id"], [])})
+        items.append({"req": r, "latest": latest, "share": share, "tags": tag_map.get(r["id"], []), "fav": r["id"] in favs, "open_comments": open_comments.get(r["id"], 0)})
     return ctx.render(
         "index.html",
         items=items,
@@ -87,6 +93,10 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
         total=total,
         all_tags=queries.active_tags(ctx.conn),
         tag=tag,
+        fav=fav,
+        favorites=favorites_list(ctx) if not (q or project or tag or fav or page > 1) else [],
+        recents=recent_list(ctx) if not (q or project or tag or fav or page > 1) else [],
+        bot_username=ctx.cfg.tg_bot_username,
     )
 
 
@@ -154,6 +164,7 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
     req = queries.requirement_or_404(ctx.conn, req_id)
     if req["kind"] == "v2":
         return ctx.redirect(f"/v2/req/{req_id}")
+    record_view(ctx, req_id)
     context = {
         "req": req,
         "owners": queries.owners_of(ctx.conn, req_id),
@@ -162,6 +173,8 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
         "can_delete": can_delete(ctx, req),
         "tags": queries.tags_of(ctx.conn, req_id),
         "all_tags": queries.active_tags(ctx.conn),
+        "fav": is_fav(ctx, req_id),
+        "comments": comments_for_requirement(ctx, req_id),
     }
     if req["kind"] == "single":
         doc = queries.primary_document(ctx.conn, req_id)
