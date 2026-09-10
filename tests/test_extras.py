@@ -136,3 +136,39 @@ def test_public_comments_and_notifications(app, superuser, client_factory):
     r = superuser.post("/me/notify-test", data={"csrf": csrf, "back": "/"}, follow_redirects=False)
     assert r.status_code == 303 and notifier.sent and notifier.sent[0][0] == 1001 and "测试消息" in notifier.sent[0][1]
     assert "发送测试消息" in superuser.get("/").text
+
+
+def test_public_export_and_original(superuser, client_factory):
+    csrf = csrf_of(superuser)
+    rid = create_single(superuser, csrf, "公开导出", notes="内部备注勿外泄", file=html_file("v1.html", "one"))
+    doc_id = int(re.search(r"/doc/(\d+)/upload", superuser.get(f"/req/{rid}").text).group(1))
+    superuser.post(f"/doc/{doc_id}/upload", data={"csrf": csrf, "note": "二"}, files={"file": html_file("v2.html", "two")}, follow_redirects=False)
+    code = share_code_of(superuser.get(f"/req/{rid}").text)
+    anon = client_factory()
+    page = anon.get(f"/s/{code}/").text
+    assert f'"exportUrl": "/s/{code}/__export"' in page and f"/s/{code}/__original/1" in page and "打包下载全部版本" in page.encode("ascii", "backslashreplace").decode("unicode_escape")
+    r = anon.get(f"/s/{code}/__export")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert "文档/v1-v1.html" in z.namelist() and "文档/v2-v2.html" in z.namelist()
+    readme = z.read("README.md").decode()
+    assert "公开导出" in readme and "内部备注勿外泄" not in readme and "## 留言" not in readme
+    r = anon.get(f"/s/{code}/__original/1")
+    assert r.status_code == 200 and "v1.html" in r.headers["content-disposition"] and b"one" in r.content
+    assert anon.get(f"/s/{code}/__original/9").status_code == 404
+    # 复合：目录码导整包，子文档码只导该文档
+    superuser.post(f"/req/{rid}/convert", data={"csrf": csrf}, follow_redirects=False)
+    superuser.post(f"/req/{rid}/docs/new", data={"csrf": csrf, "name": "子B"}, files={"file": html_file("b.html", "b")}, follow_redirects=False)
+    detail = superuser.get(f"/req/{rid}").text
+    dir_code = re.search(r"目录入口页.*?/s/([a-z0-9]{12})/", detail, re.S).group(1)
+    dir_page = anon.get(f"/s/{dir_code}/").text
+    assert f"/s/{dir_code}/__export" in dir_page
+    names = zipfile.ZipFile(io.BytesIO(anon.get(f"/s/{dir_code}/__export").content)).namelist()
+    assert "子B/v1-b.html" in names and any(n.startswith("公开导出/v1-") for n in names)
+    b_code = re.search(r'/s/([a-z0-9]{12})/">子B', dir_page).group(1)
+    names = zipfile.ZipFile(io.BytesIO(anon.get(f"/s/{b_code}/__export").content)).namelist()
+    assert names == ["子B/v1-b.html", "README.md"] or set(names) == {"子B/v1-b.html", "README.md"}
+    assert "打包下载本文档" in anon.get(f"/s/{b_code}/").text.encode("ascii", "backslashreplace").decode("unicode_escape")
+    # 重置链接后旧码的导出也失效
+    superuser.post(f"/req/{rid}/reset-share", data={"csrf": csrf}, follow_redirects=False)
+    assert anon.get(f"/s/{dir_code}/__export").status_code == 404

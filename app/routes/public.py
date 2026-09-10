@@ -97,8 +97,10 @@ def _widget_data(ctx: Ctx, doc, ver) -> dict | None:
         "latest": latest,
         "latestUrl": f"/s/{doc['share_code']}/",
         "commentsUrl": f"/s/{doc['share_code']}/__comments",
+        "exportUrl": f"/s/{doc['share_code']}/__export",
+        "exportLabel": "打包下载全部版本" if req["kind"] == "single" else "打包下载本文档",
         "updated": ctx.fmt_dt(versions[0]["uploaded_at"]) if versions else "",
-        "versions": [{"n": v["number"], "time": ctx.fmt_dt(v["uploaded_at"]), "by": v["uploader"] or "", "note": v["note"] or "", "url": f"/v/{doc['share_code']}/{v['number']}/"} for v in versions],
+        "versions": [{"n": v["number"], "time": ctx.fmt_dt(v["uploaded_at"]), "by": v["uploader"] or "", "note": v["note"] or "", "url": f"/v/{doc['share_code']}/{v['number']}/", "file": f"/s/{doc['share_code']}/__original/{v['number']}"} for v in versions],
     }
 
 
@@ -220,6 +222,40 @@ async def public_comments_create(code: str, request: Request, ctx: Ctx = Depends
         notify_requirement(ctx.conn, ctx.notifier, req["id"], f"【{ctx.settings.get('site_name') or 'DCPrd'}】{author} 在「{title}」留言：\n{body[:300]}\n{ctx.base_url}/req/{req['id']}#comments")
     c = db.one(ctx.conn, "SELECT * FROM comments WHERE id = ?", (cid,))
     return JSONResponse(_comment_json(ctx, c), headers=_CORS)
+
+
+# ---------- 公开打包下载 ----------
+
+@router.get("/s/{code}/__export")
+async def public_export(code: str, ctx: Ctx = Depends(get_ctx)):
+    """文档码：单体需求导整个需求，复合子文档只导该文档；目录码：导整个复合需求。公开版不含内部备注与留言。"""
+    from .extras import export_response
+    doc = _doc_by_code(ctx, code)
+    if doc:
+        req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ? AND deleted_at IS NULL", (doc["requirement_id"],))
+        if not req:
+            raise HTTPException(404, "链接无效或已失效")
+        return await export_response(ctx, req, only_doc=None if req["kind"] == "single" else doc, public=True)
+    req = _req_by_code(ctx, code)
+    if not req:
+        raise HTTPException(404, "链接无效或已失效")
+    return await export_response(ctx, req, public=True)
+
+
+@router.get("/s/{code}/__original/{number}")
+async def public_original(code: str, number: int, ctx: Ctx = Depends(get_ctx)):
+    """下载某个版本的原始上传文件。"""
+    doc = _doc_by_code(ctx, code)
+    if not doc:
+        raise HTTPException(404, "链接无效或已失效")
+    ver = queries.version_by_number(ctx.conn, doc["id"], number)
+    if not ver:
+        raise HTTPException(404, "版本不存在")
+    from ..storage import version_dir
+    path = version_dir(ctx.cfg, doc["id"], ver["number"]) / "original" / ver["original_filename"]
+    if not path.is_file():
+        raise HTTPException(404, "原文件不存在")
+    return FileResponse(str(path), filename=ver["original_filename"], media_type="application/octet-stream")
 
 
 @router.get("/s/{code}")

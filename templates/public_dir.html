@@ -6,7 +6,7 @@
   <header class="pd-head">
     <div class="pd-kicker"><span class="tag tag-{{ req.project }}">{{ PROJECTS.get(req.project, req.project|upper) }}</span> 需求文档目录</div>
     <h1>{{ req.name }}</h1>
-    <p class="muted">共 {{ docs|length }} 份文档 · 更新于 {{ fmt_dt(req.updated_at) }}</p>
+    <p class="muted">共 {{ docs|length }} 份文档 · 更新于 {{ fmt_dt(req.updated_at) }} · <a href="/s/{{ req.share_code }}/__export">打包下载全部文档</a></p>
   </header>
   <ol class="pd-list">
   {% for item in docs %}

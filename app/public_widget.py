@@ -12,7 +12,7 @@ _BODY_END = re.compile(rb"</body\s*>", re.I)
 WIDGET_JS = r"""
 (function(){
   var D = __DATA__;
-  var T = {info:'需求信息', owners:'负责人', updated:'更新时间', versions:'历史版本', latest:'最新', current:'当前', history:'历史版本', dir:'返回目录', close:'收起', none:'—', viewingOld:'你正在查看历史版本，', toLatest:'前往最新版', by:'', jira:'Jira', tabInfo:'信息', tabComments:'留言', yourName:'你的名字（必填）', yourComment:'留言内容：问题、建议或确认', send:'发送', sending:'发送中…', noComments:'还没有留言，欢迎第一个提出。', resolved:'已处理', loadFail:'留言加载失败', needBoth:'请填写名字和留言内容'};
+  var T = {info:'需求信息', owners:'负责人', updated:'更新时间', versions:'历史版本', latest:'最新', current:'当前', history:'历史版本', dir:'返回目录', close:'收起', none:'—', viewingOld:'你正在查看历史版本，', toLatest:'前往最新版', by:'', jira:'Jira', tabInfo:'信息', tabComments:'留言', download:'打包下载', file:'原文件', yourName:'你的名字（必填）', yourComment:'留言内容：问题、建议或确认', send:'发送', sending:'发送中…', noComments:'还没有留言，欢迎第一个提出。', resolved:'已处理', loadFail:'留言加载失败', needBoth:'请填写名字和留言内容'};
   function el(tag, attrs, children){ var e = document.createElement(tag); for (var k in (attrs||{})) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'html') e.innerHTML = attrs[k]; else e.setAttribute(k, attrs[k]); } (children||[]).forEach(function(c){ if (c) e.appendChild(c); }); return e; }
   var host = el('div', {id:'dcpm-widget-host'});
   host.style.cssText = 'all:initial;position:fixed;right:16px;bottom:16px;z-index:2147483646;';
@@ -26,7 +26,7 @@ WIDGET_JS = r"""
     '.tag{display:inline-block;font-size:10px;line-height:1;padding:3px 5px;border-radius:4px;color:#fff;font-weight:600;vertical-align:middle;margin-right:4px}.tag-eb{background:#0ea5e9}.tag-im{background:#8b5cf6}.tag-tk{background:#f59e0b}' +
     'dl{display:grid;grid-template-columns:64px 1fr;gap:4px 10px;margin:0;padding:10px 14px;border-bottom:1px solid #f1f3f5}dt{color:#6b7280}dd{margin:0;word-break:break-word}' +
     '.warn{background:#fef3c7;color:#92400e;padding:8px 14px;font-size:12px}.warn a{color:#92400e;font-weight:600}' +
-    '.vs{list-style:none;margin:0;padding:6px 8px 10px}.vs li a{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:6px;color:#1f2329;text-decoration:none}.vs li a:hover{background:#f3f4f6}.vs li.cur a{background:#eef2ff}' +
+    '.vs{list-style:none;margin:0;padding:6px 8px 10px}.vs li{display:flex;align-items:stretch}.vs li a{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:6px;color:#1f2329;text-decoration:none;flex:1;min-width:0}.vs li a:hover{background:#f3f4f6}.vs li.cur a{background:#eef2ff}.vs li a.file{flex:none;color:#6b7280;padding:6px 8px;font-weight:700}.vs li a.file:hover{color:#2563eb}' +
     '.vs .num{font-weight:600;min-width:34px}.vs .meta{color:#6b7280;font-size:12px;flex:1}.vs .note{display:block;color:#374151;font-size:12px}.vs .cur-badge{font-size:10px;background:#2563eb;color:#fff;border-radius:999px;padding:1px 6px}' +
     '.ft{padding:8px 14px 12px;display:flex;gap:8px;flex-wrap:wrap}.btn{display:inline-block;padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;text-decoration:none;font-size:12px;background:#fff}.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}' +
     '.jira{font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-right:6px;color:#2563eb;text-decoration:none}' +
@@ -48,9 +48,9 @@ WIDGET_JS = r"""
   var warn = isOld ? el('div', {class:'warn'}, [ document.createTextNode(T.viewingOld), el('a', {href:D.latestUrl, text:T.toLatest + ' v' + D.latest}) ]) : null;
   var vs = el('ul', {class:'vs'}, D.versions.map(function(v){
     var cur = v.n === D.current;
-    return el('li', {class: cur ? 'cur' : ''}, [ el('a', {href: v.n === D.latest ? D.latestUrl : v.url}, [ el('span', {class:'num', text:'v' + v.n}), el('span', {class:'meta'}, [ document.createTextNode((v.time || '') + (v.by ? ' · ' + v.by : '')), v.note ? el('span', {class:'note', text:v.note}) : null ]), cur ? el('span', {class:'cur-badge', text:T.current}) : (v.n === D.latest ? el('span', {class:'cur-badge', text:T.latest}) : null) ]) ]);
+    return el('li', {class: cur ? 'cur' : ''}, [ el('a', {href: v.n === D.latest ? D.latestUrl : v.url}, [ el('span', {class:'num', text:'v' + v.n}), el('span', {class:'meta'}, [ document.createTextNode((v.time || '') + (v.by ? ' · ' + v.by : '')), v.note ? el('span', {class:'note', text:v.note}) : null ]), cur ? el('span', {class:'cur-badge', text:T.current}) : (v.n === D.latest ? el('span', {class:'cur-badge', text:T.latest}) : null) ]), v.file ? el('a', {class:'file', href:v.file, title:T.file, text:'\u2193'}) : null ]);
   }));
-  var ft = el('div', {class:'ft'}, [ D.doc.dirUrl ? el('a', {class:'btn primary', href:D.doc.dirUrl, text:T.dir}) : null, isOld ? el('a', {class:'btn', href:D.latestUrl, text:T.latest}) : null ]);
+  var ft = el('div', {class:'ft'}, [ D.doc.dirUrl ? el('a', {class:'btn primary', href:D.doc.dirUrl, text:T.dir}) : null, isOld ? el('a', {class:'btn', href:D.latestUrl, text:T.latest}) : null, D.exportUrl ? el('a', {class:'btn', href:D.exportUrl, text:(D.exportLabel || T.download)}) : null ]);
   var infoSec = el('div', {class:'sec on'}, [warn, dl, el('div', {style:'padding:6px 14px 0;color:#6b7280;font-size:12px', text:T.versions + ' (' + D.versions.length + ')'}), vs, ft]);
   // 留言
   var list = el('ul', {class:'cl'}, [el('li', {class:'empty', text:'…'})]);

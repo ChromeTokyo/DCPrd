@@ -88,10 +88,13 @@ def _safe_name(s: str) -> str:
     return s[:80] or "unnamed"
 
 
-def _build_export(ctx: Ctx, req, out_path: Path) -> None:
+def _build_export(ctx: Ctx, req, out_path: Path, only_doc_id: int | None = None, public: bool = False) -> None:
+    """打包需求：README.md + 各文档全部版本的原始文件。only_doc_id 只导某个子文档；public 省略内部备注与留言。"""
     owners = "、".join(o["name"] for o in queries.owners_of(ctx.conn, req["id"])) or "—"
     tags = "、".join(t["name"] for t in queries.tags_of(ctx.conn, req["id"])) or "—"
     docs = db.all_rows(ctx.conn, "SELECT * FROM documents WHERE requirement_id = ? AND deleted_at IS NULL ORDER BY position, id", (req["id"],))
+    if only_doc_id:
+        docs = [d for d in docs if d["id"] == only_doc_id]
     lines = [
         f"# {req['name']}", "",
         f"- 项目：{PROJECTS.get(req['project'], req['project'])}",
@@ -102,7 +105,9 @@ def _build_export(ctx: Ctx, req, out_path: Path) -> None:
         f"- 创建：{queries.user_name(ctx.conn, req['created_by'])} · {ctx.fmt_dt(req['created_at'])}",
         f"- 最近更新：{queries.user_name(ctx.conn, req['updated_by'])} · {ctx.fmt_dt(req['updated_at'])}",
         f"- 分享链接：{ctx.base_url}/s/{req['share_code']}/" if req["kind"] == "compound" else "",
-        "", "## 备注", "", req["notes"] or "—", "", "## 文档", "",
+        f"- 导出时间：{ctx.fmt_dt(db.utcnow())}",
+        *([] if public else ["", "## 备注", "", req["notes"] or "—"]),
+        "", "## 文档", "",
     ]
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in docs:
@@ -110,7 +115,7 @@ def _build_export(ctx: Ctx, req, out_path: Path) -> None:
             versions = queries.versions_of(ctx.conn, d["id"])
             lines.append(f"### {d['name']}")
             lines.append(f"- 分享链接：{ctx.base_url}/s/{d['share_code']}/")
-            if d["notes"]:
+            if d["notes"] and not public:
                 lines.append(f"- 备注：{d['notes']}")
             lines.append("")
             lines.append("| 版本 | 上传人 | 时间 | 文件 | 说明 |")
@@ -122,7 +127,7 @@ def _build_export(ctx: Ctx, req, out_path: Path) -> None:
                     zf.write(src, arc)
                 lines.append(f"| v{v['number']} | {v['uploader_name'] or '—'} | {ctx.fmt_dt(v['uploaded_at'])} | {arc if src.is_file() else '(文件缺失)'} | {(v['note'] or '').replace('|', '/')} |")
             lines.append("")
-        comments = db.all_rows(
+        comments = [] if public else db.all_rows(
             ctx.conn,
             """SELECT c.*, d.name AS doc_name FROM comments c JOIN documents d ON d.id = c.document_id
                WHERE d.requirement_id = ? AND c.deleted_at IS NULL ORDER BY c.id""",
@@ -135,15 +140,21 @@ def _build_export(ctx: Ctx, req, out_path: Path) -> None:
         zf.writestr("README.md", "\n".join(l for l in lines if l is not None))
 
 
+async def export_response(ctx: Ctx, req, only_doc=None, public: bool = False) -> FileResponse:
+    ctx.cfg.tmp_dir.mkdir(parents=True, exist_ok=True)
+    out = ctx.cfg.tmp_dir / f"export-{req['id']}-{uuid.uuid4().hex}.zip"
+    await run_in_threadpool(_build_export, ctx, req, out, only_doc["id"] if only_doc is not None else None, public)
+    label = req["name"] if only_doc is None or req["kind"] == "single" else f"{req['name']}-{only_doc['name']}"
+    resp = FileResponse(str(out), filename=f"{_safe_name(label)}.zip", media_type="application/zip", background=BackgroundTask(lambda: out.unlink(missing_ok=True)))
+    resp.headers["cache-control"] = "no-store"
+    return resp
+
+
 @router.get("/req/{req_id}/export")
 async def export_requirement(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = queries.requirement_or_404(ctx.conn, req_id)
-    ctx.cfg.tmp_dir.mkdir(parents=True, exist_ok=True)
-    out = ctx.cfg.tmp_dir / f"export-{req_id}-{uuid.uuid4().hex}.zip"
-    await run_in_threadpool(_build_export, ctx, req, out)
-    filename = f"{_safe_name(req['name'])}.zip"
-    return FileResponse(str(out), filename=filename, media_type="application/zip", background=BackgroundTask(lambda: out.unlink(missing_ok=True)))
+    return await export_response(ctx, req)
 
 
 # ---------- 上传前预览 ----------
