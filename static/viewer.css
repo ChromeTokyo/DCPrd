@@ -1,0 +1,29 @@
+/* 图片 / Markdown 公开查看页 */
+html,body{margin:0;padding:0}
+body{background:#f5f6f8;color:#1f2329;font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif}
+main{max-width:920px;margin:0 auto;padding:28px 20px 80px}
+.view-image main{max-width:none;padding:20px}
+.pic{margin:0;text-align:center}
+.pic img{max-width:100%;height:auto;background:#fff;border:1px solid #e5e7eb;border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.md{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:36px 44px}
+.md h1,.md h2,.md h3,.md h4{line-height:1.35;margin:1.6em 0 .6em;font-weight:650}
+.md h1{font-size:28px;margin-top:0;padding-bottom:.3em;border-bottom:1px solid #eee}
+.md h2{font-size:22px;padding-bottom:.25em;border-bottom:1px solid #f1f3f5}
+.md h3{font-size:18px}.md h4{font-size:16px}
+.md p,.md ul,.md ol,.md blockquote,.md table,.md pre{margin:0 0 1em}
+.md ul,.md ol{padding-left:1.8em}
+.md li+li{margin-top:.2em}
+.md a{color:#2563eb}
+.md img{max-width:100%;height:auto;border-radius:6px}
+.md blockquote{border-left:4px solid #dbeafe;background:#f8fafc;color:#4b5563;padding:8px 14px;margin-left:0}
+.md code{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f1f3f5;padding:2px 5px;border-radius:4px}
+.md pre{background:#0f172a;color:#e2e8f0;padding:14px 16px;border-radius:8px;overflow:auto}
+.md pre code{background:none;color:inherit;padding:0;font-size:13px}
+.md table{border-collapse:collapse;width:100%;display:block;overflow-x:auto;font-size:14px}
+.md th,.md td{border:1px solid #e5e7eb;padding:8px 12px;text-align:left;vertical-align:top}
+.md th{background:#f9fafb;font-weight:600}
+.md tr:nth-child(even) td{background:#fafafa}
+.md hr{border:0;border-top:1px solid #e5e7eb;margin:2em 0}
+.md input[type=checkbox]{margin-right:6px}
+.md .toc{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:10px 16px;font-size:14px}
+@media (max-width:640px){.md{padding:20px 18px}main{padding:14px 12px 60px}}

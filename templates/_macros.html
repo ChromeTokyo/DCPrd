@@ -50,8 +50,8 @@
   <form method="post" action="{{ action }}" enctype="multipart/form-data" class="form-inline-block">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="field">
-      <label>文件（.html / .htm / .zip）</label>
-      <input type="file" name="file" accept=".html,.htm,.zip" required>
+      <label>文件（.html / .zip / 图片 / .md）</label>
+      <input type="file" name="file" accept=".html,.htm,.zip,.png,.jpg,.jpeg,.gif,.webp,.md" required>
     </div>
     <div class="field">
       <label>本次更新说明（可选）</label>
@@ -75,7 +75,7 @@
       <td><strong>v{{ v.number }}</strong>{% if not v.entry_path %} <span class="tag tag-warn">待选择入口</span>{% endif %}</td>
       <td>{{ v.uploader_name or '（已删除用户）' }}</td>
       <td class="nowrap">{{ fmt_dt(v.uploaded_at) }}</td>
-      <td class="file"><span title="{{ v.original_filename }}">{{ v.original_filename }}</span><br><span class="muted">{{ v.size_bytes|filesize }} · {{ v.kind|upper }}{% if v.kind == 'zip' %} · {{ v.file_count }} 个文件{% endif %}</span></td>
+      <td class="file"><span title="{{ v.original_filename }}">{{ v.original_filename }}</span><br><span class="muted">{{ v.size_bytes|filesize }} · {{ KIND_LABELS.get(v.kind, v.kind|upper) }}{% if v.kind == 'zip' %} · {{ v.file_count }} 个文件{% endif %}</span></td>
       <td class="note">{{ v.note }}</td>
       <td class="actions">
         {% if v.entry_path %}

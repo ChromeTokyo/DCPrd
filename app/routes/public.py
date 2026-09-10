@@ -1,8 +1,12 @@
 """公开访问：/s/<code>/... 最新版本；/v/<code>/<n>/... 固定版本；复合需求目录页。"""
 from __future__ import annotations
 
+import html as html_mod
 import mimetypes
 import re
+from urllib.parse import quote
+
+import markdown
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,7 +16,7 @@ from .. import db, queries
 from ..public_widget import inject_widget
 from ..web import PROJECTS, split_jira_keys
 from ..main import get_ctx
-from ..storage import content_file
+from ..storage import IMAGE_EXTS, MD_EXTS, content_file
 from ..web import Ctx
 
 router = APIRouter()
@@ -23,6 +27,7 @@ SANDBOX_CSP = (
 )
 _CHARSET_RE = re.compile(rb"""<meta[^>]+charset\s*=\s*["']?\s*([A-Za-z0-9_\-]+)""", re.I)
 _EXTRA_TYPES = {
+    ".md": "text/markdown", ".markdown": "text/markdown",
     ".js": "application/javascript", ".mjs": "application/javascript", ".css": "text/css", ".svg": "image/svg+xml",
     ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf", ".json": "application/json",
     ".webp": "image/webp", ".ico": "image/x-icon", ".map": "application/json", ".wasm": "application/wasm",
@@ -109,14 +114,49 @@ def _req_by_code(ctx: Ctx, code: str):
     return db.one(ctx.conn, "SELECT * FROM requirements WHERE share_code = ? AND deleted_at IS NULL AND kind = 'compound'", (code,))
 
 
+def _render_viewer(ctx: Ctx, doc, ver, path: Path, cache: str, widget: dict | None) -> Response:
+    """图片 / Markdown 入口：包一层干净的查看页。"""
+    name = html_mod.escape(doc["name"])
+    file_url = quote(ver["entry_path"], safe="/")
+    if ver["kind"] == "md":
+        text = path.read_text("utf-8", errors="replace")
+        body = markdown.markdown(text, extensions=["extra", "tables", "fenced_code", "sane_lists", "toc", "nl2br"], output_format="html5")
+        inner = f'<article class="md">{body}</article>'
+        cls = "view-md"
+    else:
+        inner = f'<figure class="pic"><img src="{file_url}" alt="{name}"></figure>'
+        cls = "view-image"
+    page = (
+        '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{name}</title>" '<link rel="stylesheet" href="/static/viewer.css"></head>'
+        f'<body class="{cls}"><main>{inner}</main></body></html>'
+    ).encode("utf-8")
+    if widget is not None:
+        page = inject_widget(page, widget)
+    resp = Response(page, media_type="text/html")
+    resp.headers["content-type"] = "text/html; charset=utf-8"
+    resp.headers["cache-control"] = cache
+    if ctx.sandbox_enabled:
+        resp.headers["content-security-policy"] = SANDBOX_CSP
+    return resp
+
+
 def _serve_version(ctx: Ctx, doc, ver, rel: str, prefix: str, cache: str) -> Response:
-    if rel == "":
+    is_root = rel == ""
+    if is_root:
         entry = ver["entry_path"]
         if "/" in entry:
             return RedirectResponse(f"{prefix}{entry}", status_code=302)
         rel = entry
-    widget = _widget_data(ctx, doc, ver) if rel == ver["entry_path"] else None
+    is_entry = rel == ver["entry_path"]
     path = content_file(ctx.cfg, doc["id"], ver["number"], rel)
+    if ver["kind"] in ("image", "md"):
+        # 根地址给查看页（带小菜单）；直接访问文件名则返回原始文件
+        if is_root and path is not None:
+            return _render_viewer(ctx, doc, ver, path, cache, _widget_data(ctx, doc, ver))
+        widget = None
+    else:
+        widget = _widget_data(ctx, doc, ver) if is_entry else None
     if path is None:
         # 目录访问：尝试 index.html
         if rel.endswith("/"):

@@ -242,3 +242,31 @@ def test_public_widget_on_entry_only(superuser):
     # 设置关闭后不注入
     superuser.post("/admin/settings", data={"csrf": csrf, "site_name": "X", "jira_base_url": "https://j", "timezone": "Asia/Tokyo", "max_upload_mb": "10", "sandbox_enabled": "1"}, follow_redirects=False)
     assert "dcpm-widget" not in superuser.get(f"/s/{doc_code}/").text
+
+
+def test_image_and_markdown_uploads(superuser):
+    csrf = csrf_of(superuser)
+    from tests.conftest import tiny_png
+    rid = create_single(superuser, csrf, "设计稿", file=("首页 设计.png", tiny_png(), "image/png"))
+    detail = superuser.get(f"/req/{rid}").text
+    assert "图片" in detail and "v1" in detail
+    code = share_code_of(detail)
+    r = superuser.get(f"/s/{code}/")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+    assert 'class="view-image"' in r.text and 'src="%E9%A6%96%E9%A1%B5%20%E8%AE%BE%E8%AE%A1.png"' in r.text and "dcpm-widget" in r.text
+    raw = superuser.get(f"/s/{code}/首页 设计.png")
+    assert raw.status_code == 200 and raw.headers["content-type"] == "image/png" and raw.content == tiny_png()
+    # v2 换成 markdown
+    md = "# 标题\n\n段落 **加粗**\n\n| 列A | 列B |\n|---|---|\n| 1 | 2 |\n\n```python\nprint(1)\n```\n\n- [ ] 待办\n"
+    superuser.post(f"/doc/{doc_id_of(superuser, rid)}/upload", data={"csrf": csrf, "note": "改成文档"}, files={"file": ("需求.md", md.encode(), "text/markdown")}, follow_redirects=False)
+    r = superuser.get(f"/s/{code}/")
+    assert 'class="view-md"' in r.text and "<h1" in r.text and "<strong>加粗</strong>" in r.text and "<table>" in r.text and "<code" in r.text
+    assert "dcpm-widget" in r.text and '"current": 2' in r.text
+    assert superuser.get(f"/s/{code}/需求.md").headers["content-type"].startswith("text/markdown")
+    # 历史版本仍是图片查看页
+    r1 = superuser.get(f"/v/{code}/1/")
+    assert 'class="view-image"' in r1.text and "immutable" in r1.headers["cache-control"]
+    assert "Markdown" in superuser.get(f"/req/{rid}").text
+    # 不支持的类型
+    superuser.post(f"/doc/{doc_id_of(superuser, rid)}/upload", data={"csrf": csrf}, files={"file": ("a.pdf", b"%PDF", "application/pdf")}, follow_redirects=False)
+    assert "只支持" in superuser.get(f"/req/{rid}").text

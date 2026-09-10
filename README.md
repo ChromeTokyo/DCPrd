@@ -113,6 +113,7 @@ cp .env.example .env    # 本地把 DEV_MODE=1、DATA_DIR=./data、DOMAIN=localh
 - **删除用户**为软删除（保留其在版本记录、审计日志中的姓名），并解除 Telegram 绑定、移出负责人列表。
 - **复合需求转换**不做反向；转换时原文档的分享码移交给需求目录（已发出的链接改为打开目录入口页），原文档换新码；单体需求删除只删需求本身（其唯一文档随需求一起隐藏）。
 - **zip**：拒绝绝对路径 / `..`，跳过 `__MACOSX`、`.DS_Store`、`Thumbs.db`、符号链接；文件名按 utf-8 → gbk 顺序还原；单一顶层目录自动剥离；解压总量 ≤ 4×上传上限、文件数 ≤ 100000。
+- **上传格式**：单个 `.html/.htm`、zip、图片（png/jpg/jpeg/gif/webp）、`.md`。图片与 Markdown 的分享根地址返回一个干净的查看页（Markdown 用 Python-Markdown 服务端渲染，含表格/代码块/任务列表），直接访问文件名则返回原文件。
 - **公开页小菜单**：分享出去的 HTML 入口页右下角注入一个 Shadow DOM 隔离的小菜单（需求名、负责人、Jira、更新时间、历史版本切换、复合需求返回目录），只注入入口文件，zip 内其他页面/资源不动；注入片段为纯 ASCII，对 gbk 等编码安全；系统设置可关闭。
 - **公开文档**：`/s/` 为 `no-cache`，`/v/` 为一年 immutable；html 响应按 `<meta charset>` 输出 charset；沙箱开关默认开（CSP `sandbox` 不含 `allow-same-origin`）。
 - **2.0 数据**：`/data/v2/pages/<page_id>/<version_id>/page.html|png`；schema_version 2，启动时自动建表并给 requirements 补列（v2 需求 `kind='v2'`，1.0 列表过滤掉）。

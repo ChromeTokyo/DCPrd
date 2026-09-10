@@ -86,6 +86,8 @@ def build_env() -> Environment:
     env.filters["urlquote"] = lambda s: quote(str(s), safe="")
     env.filters["tojson_attr"] = lambda v: html.escape(json.dumps(v, ensure_ascii=False), quote=True)
     env.globals["PROJECTS"] = PROJECTS
+    from .storage import KIND_LABELS
+    env.globals["KIND_LABELS"] = KIND_LABELS
     return env
 
 

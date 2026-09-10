@@ -20,6 +20,9 @@ MAX_FILES = 100_000
 MAX_CANDIDATES = 500
 SKIP_BASENAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 HTML_EXTS = (".html", ".htm")
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+MD_EXTS = (".md", ".markdown")
+KIND_LABELS = {"html": "HTML", "zip": "ZIP", "image": "图片", "md": "Markdown"}
 
 
 class UploadError(Exception):
@@ -44,7 +47,11 @@ def detect_kind(filename: str) -> str:
         return "html"
     if lower.endswith(".zip"):
         return "zip"
-    raise UploadError("只支持 .html / .htm 或 .zip 文件")
+    if lower.endswith(IMAGE_EXTS):
+        return "image"
+    if lower.endswith(MD_EXTS):
+        return "md"
+    raise UploadError("只支持 .html / .htm、.zip、图片（.png .jpg .gif .webp）或 .md 文件")
 
 
 def copy_stream_limited(src, dest: Path, max_bytes: int) -> int:
@@ -218,7 +225,7 @@ def create_version_from_upload(
     try:
         content_dir.mkdir(parents=True)
         original_dir.mkdir(parents=True)
-        if kind == "html":
+        if kind in ("html", "image", "md"):
             shutil.copyfile(tmp_path, content_dir / filename)
             entry, candidates, file_count = filename, None, 1
         else:
