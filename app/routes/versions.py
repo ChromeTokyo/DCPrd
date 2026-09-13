@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .. import db, queries
 from ..main import get_ctx
-from ..storage import republish_version, version_dir
+from ..storage import missing_refs_for_entry, republish_version, set_missing_refs, version_dir
 from ..web import Ctx
 from .documents import back_url
 
@@ -36,9 +36,14 @@ async def entry_set(ver_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
         ctx.flash("err", "请选择一个有效的入口文件")
         return ctx.redirect(f"/ver/{ver_id}/entry")
     db.update(ctx.conn, "versions", ver_id, {"entry_path": choice})
+    missing = missing_refs_for_entry(version_dir(ctx.cfg, doc["id"], ver["number"]) / "content", choice)
+    set_missing_refs(ctx.conn, ver_id, missing)
     db.update(ctx.conn, "documents", doc["id"], {"updated_at": db.utcnow()})
     queries.touch_requirement(ctx.conn, req["id"], ctx.user["id"])
-    ctx.flash("ok", f"入口已设置为 {choice}，v{ver['number']} 已发布")
+    msg = f"入口已设置为 {choice}，v{ver['number']} 已发布"
+    if missing:
+        msg += f"。注意：入口页引用的 {len(missing)} 个文件在压缩包里找不到（如 {'、'.join(missing[:3])}）"
+    ctx.flash("ok" if not missing else "warn", msg)
     return ctx.redirect(back_url(doc, req))
 
 

@@ -70,7 +70,8 @@
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="field"><label>名称 <span class="req">*</span></label><input type="text" name="name" required maxlength="200"></div>
       <div class="field"><label>备注</label><textarea name="notes" rows="2"></textarea></div>
-      <div class="field"><label>首个文件（可选）</label><input type="file" name="file" accept=".html,.htm,.zip,.png,.jpg,.jpeg,.gif,.webp,.md" data-previewable> <button type="button" class="btn btn-sm preview-btn" hidden>预览</button></div>
+      <div class="field"><label>首个文件（可选）</label><input type="file" name="file" accept=".html,.htm,.zip,.png,.jpg,.jpeg,.gif,.webp,.md" data-previewable> <button type="button" class="btn btn-sm preview-btn" hidden>预览</button>
+        <label class="check force-html" hidden><input type="checkbox" name="force" value="1"> 我确认只上传这个 HTML（引用的本地文件不会显示）</label></div>
       <div class="field"><label>更新说明（可选）</label><input type="text" name="note" maxlength="500"></div>
       <button type="submit" class="btn btn-primary">新增子文档</button>
     </form>

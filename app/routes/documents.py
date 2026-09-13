@@ -17,18 +17,22 @@ from ..web import Ctx
 router = APIRouter()
 
 
-async def handle_upload(ctx: Ctx, doc, upload: UploadFile | None, note: str) -> tuple[int, bool] | None:
-    """处理一次上传；无文件返回 None。UploadError 由调用方转成 flash。"""
+async def handle_upload(ctx: Ctx, doc, upload: UploadFile | None, note: str, force: bool = False) -> tuple[int, bool] | None:
+    """处理一次上传；无文件返回 None。UploadError 由调用方转成 flash。
+    附加提示（缺失引用、编码无法识别）写到 ctx.upload_notice，调用方拼进 flash。"""
+    ctx.upload_notice = ""
     if upload is None or not upload.filename:
         return None
     tmp = ctx.cfg.tmp_dir / f"up-{uuid.uuid4().hex}"
     ctx.cfg.tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
         size = await run_in_threadpool(copy_stream_limited, upload.file, tmp, ctx.max_upload_bytes)
-        result = await run_in_threadpool(
+        outcome = await run_in_threadpool(
             create_version_from_upload,
-            ctx.cfg, ctx.conn, doc["id"], ctx.user["id"], upload.filename, tmp, size, note or "", ctx.max_upload_bytes,
+            ctx.cfg, ctx.conn, doc["id"], ctx.user["id"], upload.filename, tmp, size, note or "", ctx.max_upload_bytes, force,
         )
+        result = (outcome.version_id, outcome.needs_entry)
+        ctx.upload_notice = outcome.notice()
     finally:
         Path(tmp).unlink(missing_ok=True)
         await upload.close()
@@ -70,6 +74,8 @@ async def doc_detail(doc_id: int, ctx: Ctx = Depends(get_ctx)):
            LEFT JOIN users u ON u.id = c.resolved_by WHERE c.document_id = ? AND c.deleted_at IS NULL ORDER BY c.resolved_at IS NOT NULL, c.id DESC""",
         (doc["id"],),
     )
+    from ..storage import ensure_missing_refs
+    ensure_missing_refs(ctx.cfg, ctx.conn, queries.versions_of(ctx.conn, doc["id"]))
     return ctx.render(
         "doc_detail.html",
         doc=doc,
@@ -139,13 +145,13 @@ async def doc_upload(doc_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
         ctx.flash("err", "请选择要上传的文件")
         return ctx.redirect(back_url(doc, req))
     try:
-        result = await handle_upload(ctx, doc, upload, str(form.get("note") or ""))
+        result = await handle_upload(ctx, doc, upload, str(form.get("note") or ""), force=bool(form.get("force")))
     except UploadError as e:
         ctx.flash("err", str(e))
         return ctx.redirect(back_url(doc, req))
     vid, needs_entry = result
     if needs_entry:
-        ctx.flash("ok", "上传成功，请选择入口文件")
+        ctx.flash("ok", "上传成功，请选择入口文件" + (f"。{ctx.upload_notice}" if ctx.upload_notice else ""))
         return ctx.redirect(f"/ver/{vid}/entry")
-    ctx.flash("ok", "上传成功，已发布为最新版本")
+    ctx.flash("ok" if not ctx.upload_notice else "warn", "上传成功，已发布为最新版本" + (f"。{ctx.upload_notice}" if ctx.upload_notice else ""))
     return ctx.redirect(back_url(doc, req))

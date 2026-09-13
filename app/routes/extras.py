@@ -19,7 +19,7 @@ from starlette.datastructures import UploadFile
 
 from .. import db, queries
 from ..main import get_ctx
-from ..storage import UploadError, copy_stream_limited, decide_entry, detect_kind, extract_zip, sanitize_filename, version_dir
+from ..storage import UploadError, copy_stream_limited, decide_entry, describe_refs, detect_kind, extract_zip, find_missing_refs, sanitize_filename, scan_local_refs, version_dir
 from ..web import PROJECTS, Ctx
 
 router = APIRouter()
@@ -178,7 +178,17 @@ async def preview_upload(request: Request, ctx: Ctx = Depends(get_ctx)):
     try:
         size = await run_in_threadpool(copy_stream_limited, upload.file, tmp, ctx.max_upload_bytes)
         if kind == "html":
-            return HTMLResponse(tmp.read_bytes(), headers={"content-security-policy": "sandbox allow-scripts allow-popups allow-forms"})
+            raw = tmp.read_bytes()
+            refs = scan_local_refs(raw[: 8 * 1024 * 1024])
+            if refs:
+                banner = (
+                    '<div style="position:sticky;top:0;z-index:2147483000;background:#fee2e2;color:#991b1b;border-bottom:2px solid #ef4444;'
+                    'padding:10px 16px;font:13px/1.5 -apple-system,BlinkMacSystemFont,\'PingFang SC\',\'Microsoft YaHei\',sans-serif">'
+                    f"<b>注意：</b>这个 HTML 引用了 {html_mod.escape(describe_refs(refs))}，单独上传后这些图片/样式不会显示。请把 HTML 和这些文件夹一起压缩成 zip 上传。</div>"
+                ).encode("ascii", "xmlcharrefreplace")
+                m = re.search(rb"<body\b[^>]*>", raw, re.I)
+                raw = raw[: m.end()] + banner + raw[m.end():] if m else banner + raw
+            return HTMLResponse(raw, headers={"content-security-policy": "sandbox allow-scripts allow-popups allow-forms"})
         if kind == "md":
             body = markdown.markdown(tmp.read_text("utf-8", errors="replace"), extensions=["extra", "tables", "fenced_code", "sane_lists", "toc", "nl2br"], output_format="html5")
             return HTMLResponse(f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css"></head><body class="view-md"><main><article class="md">{body}</article></main></body></html>')
@@ -195,14 +205,22 @@ async def preview_upload(request: Request, ctx: Ctx = Depends(get_ctx)):
             except UploadError as e:
                 return HTMLResponse(_msg_page(f"压缩包无法处理：{e}"))
             entry = decide_entry(res.html_paths)
-            files = sorted(str(p.relative_to(Path(d) / "content")) for p in (Path(d) / "content").rglob("*") if p.is_file())
+            content_root = Path(d) / "content"
+            missing = find_missing_refs(content_root, entry, scan_local_refs((content_root / entry).read_bytes()[: 8 * 1024 * 1024])) if entry else []
+            warn = ""
+            if missing:
+                warn = ('<div class="sum" style="background:#fef3c7;border-color:#f59e0b;color:#92400e"><b>缺少引用文件（' + str(len(missing)) + '）：</b>入口页引用了下列文件，但压缩包里没有，上传后这些图片/样式不会显示<ul style="columns:1">'
+                        + "".join(f"<li>{html_mod.escape(x)}</li>" for x in missing[:100]) + ("<li>…</li>" if len(missing) > 100 else "") + "</ul></div>")
+            if res.undecodable_names:
+                warn += f'<div class="sum" style="background:#fef3c7;border-color:#f59e0b;color:#92400e">压缩包内含 {res.undecodable_names} 个无法识别编码的文件名，建议用 7-Zip 或 macOS 重新打包。</div>'
+            files = sorted(str(p.relative_to(content_root)) for p in content_root.rglob("*") if p.is_file())
             items = "".join(f"<li{' class=entry' if f == entry else ''}>{html_mod.escape(f)}{' ← 入口' if f == entry else ''}</li>" for f in files[:500])
             more = f"<p class='muted'>仅显示前 500 个，共 {len(files)} 个文件</p>" if len(files) > 500 else ""
             verdict = f"入口文件：<code>{html_mod.escape(entry)}</code>" if entry else f"无法自动判定入口，上传后需在 {len(res.html_paths)} 个 html 中选择"
             return HTMLResponse(
                 f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css">'
                 '<style>ul{font:13px ui-monospace,Menlo,monospace;columns:2;padding-left:20px}li.entry{font-weight:700;color:#2563eb}.sum{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:12px}</style></head>'
-                f'<body><main><div class="sum"><strong>{html_mod.escape(filename)}</strong> · {size // 1024} KB · 解压 {res.file_count} 个文件（{res.total_bytes // 1024} KB）<br>{verdict}</div><ul>{items}</ul>{more}</main></body></html>'
+                f'<body><main><div class="sum"><strong>{html_mod.escape(filename)}</strong> · {size // 1024} KB · 解压 {res.file_count} 个文件（{res.total_bytes // 1024} KB）<br>{verdict}</div>{warn}<ul>{items}</ul>{more}</main></body></html>'
             )
     except UploadError as e:
         return HTMLResponse(_msg_page(str(e)))

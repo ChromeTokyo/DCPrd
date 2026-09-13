@@ -77,6 +77,8 @@
       <label>文件（.html / .zip / 图片 / .md）</label>
       <input type="file" name="file" accept=".html,.htm,.zip,.png,.jpg,.jpeg,.gif,.webp,.md" required data-previewable>
       <button type="button" class="btn btn-sm preview-btn" hidden>预览</button>
+      <label class="check force-html" hidden><input type="checkbox" name="force" value="1"> 我确认只上传这个 HTML（引用的本地文件不会显示）</label>
+      <span class="hint">HTML 若引用了本地图片/样式，请把 HTML 和这些文件夹一起压缩成 zip 上传。</span>
     </div>
     <div class="field">
       <label>本次更新说明（可选）</label>
@@ -100,7 +102,8 @@
       <td><strong>v{{ v.number }}</strong>{% if not v.entry_path %} <span class="tag tag-warn">待选择入口</span>{% endif %}</td>
       <td>{{ v.uploader_name or '（已删除用户）' }}</td>
       <td class="nowrap">{{ fmt_dt(v.uploaded_at) }}</td>
-      <td class="file"><span title="{{ v.original_filename }}">{{ v.original_filename }}</span><br><span class="muted">{{ v.size_bytes|filesize }} · {{ KIND_LABELS.get(v.kind, v.kind|upper) }}{% if v.kind == 'zip' %} · {{ v.file_count }} 个文件{% endif %}</span></td>
+      <td class="file"><span title="{{ v.original_filename }}">{{ v.original_filename }}</span><br><span class="muted">{{ v.size_bytes|filesize }} · {{ KIND_LABELS.get(v.kind, v.kind|upper) }}{% if v.kind == 'zip' %} · {{ v.file_count }} 个文件{% endif %}</span>
+        {% set missing = v.missing_refs|fromjson %}{% if missing %}<details class="missing"><summary><span class="tag tag-warn">缺 {{ missing|length }} 个引用文件</span></summary><ul class="missing-list">{% for m in missing %}<li>{{ m }}</li>{% endfor %}</ul><p class="muted small">{% if v.kind == 'html' %}这是单独上传的 HTML，引用的本地文件未随附。{% else %}压缩包里没有这些文件，注意大小写与目录层级。{% endif %}</p></details>{% endif %}</td>
       <td class="note">{{ v.note }}</td>
       <td class="actions">
         {% if v.entry_path %}

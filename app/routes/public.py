@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html as html_mod
+import logging
 import mimetypes
 import re
 from urllib.parse import quote
@@ -20,6 +21,7 @@ from ..storage import IMAGE_EXTS, MD_EXTS, content_file
 from ..web import Ctx
 
 router = APIRouter()
+log = logging.getLogger("dcpm.public")
 
 SANDBOX_CSP = (
     "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads "
@@ -165,6 +167,7 @@ def _serve_version(ctx: Ctx, doc, ver, rel: str, prefix: str, cache: str) -> Res
         if rel.endswith("/"):
             path = content_file(ctx.cfg, doc["id"], ver["number"], rel + "index.html")
         if path is None:
+            log.warning("公开资源 404 code=%s v%s path=%s", doc["share_code"], ver["number"], rel)
             raise HTTPException(404, "文件不存在")
     return _serve(ctx, path, cache, widget)
 

@@ -85,6 +85,14 @@ def build_env() -> Environment:
     env.filters["jira_keys"] = split_jira_keys
     env.filters["urlquote"] = lambda s: quote(str(s), safe="")
     env.filters["tojson_attr"] = lambda v: html.escape(json.dumps(v, ensure_ascii=False), quote=True)
+
+    def _fromjson(v):
+        try:
+            return json.loads(v) if v else []
+        except (TypeError, ValueError):
+            return []
+
+    env.filters["fromjson"] = _fromjson
     env.globals["PROJECTS"] = PROJECTS
     from .storage import KIND_LABELS
     env.globals["KIND_LABELS"] = KIND_LABELS

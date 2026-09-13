@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS versions (
     file_count        INTEGER NOT NULL DEFAULT 0,
     entry_path        TEXT,
     html_candidates   TEXT,
+    missing_refs      TEXT,                     -- JSON 数组：入口页引用但不存在的本地文件
     note              TEXT NOT NULL DEFAULT '',
     source_version_id INTEGER,
     uploaded_by       INTEGER NOT NULL,
@@ -201,6 +202,10 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
         for col, typ in REQUIREMENT_COLUMNS_V2.items():
             if col not in existing:
                 conn.execute(f"ALTER TABLE requirements ADD COLUMN {col} {typ}")
+        # v5：versions.missing_refs
+        vcols = {r["name"] for r in conn.execute("PRAGMA table_info(versions)")}
+        if "missing_refs" not in vcols:
+            conn.execute("ALTER TABLE versions ADD COLUMN missing_refs TEXT")
         conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         for k, v in defaults.items():
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))

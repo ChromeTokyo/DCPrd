@@ -147,13 +147,16 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
         if isinstance(upload, UploadFile) and upload.filename:
             doc = db.one(ctx.conn, "SELECT * FROM documents WHERE id = ?", (doc_id,))
             try:
-                result = await handle_upload(ctx, doc, upload, str(form.get("note") or ""))
+                result = await handle_upload(ctx, doc, upload, str(form.get("note") or ""), force=bool(form.get("force")))
             except UploadError as e:
                 ctx.flash("err", f"需求已创建，但文件上传失败：{e}")
                 return ctx.redirect(f"/req/{req_id}")
             if result and result[1]:
                 ctx.flash("ok", "需求已创建，请选择入口文件")
                 return ctx.redirect(f"/ver/{result[0]}/entry")
+            if ctx.upload_notice:
+                ctx.flash("warn", f"需求已创建。{ctx.upload_notice}")
+                return ctx.redirect(f"/req/{req_id}")
     ctx.flash("ok", "需求已创建")
     return ctx.redirect(f"/req/{req_id}")
 
@@ -178,6 +181,9 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
     }
     if req["kind"] == "single":
         doc = queries.primary_document(ctx.conn, req_id)
+        if doc:
+            from ..storage import ensure_missing_refs
+            ensure_missing_refs(ctx.cfg, ctx.conn, queries.versions_of(ctx.conn, doc["id"]))
         context.update(doc=doc, versions=queries.versions_of(ctx.conn, doc["id"]) if doc else [], latest=queries.latest_version(ctx.conn, doc["id"]) if doc else None)
     else:
         context.update(docs=queries.documents_of(ctx.conn, req_id))
@@ -309,12 +315,15 @@ async def req_doc_new(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)
     if isinstance(upload, UploadFile) and upload.filename:
         doc = db.one(ctx.conn, "SELECT * FROM documents WHERE id = ?", (doc_id,))
         try:
-            result = await handle_upload(ctx, doc, upload, str(form.get("note") or ""))
+            result = await handle_upload(ctx, doc, upload, str(form.get("note") or ""), force=bool(form.get("force")))
         except UploadError as e:
             ctx.flash("err", f"子文档已创建，但文件上传失败：{e}")
             return ctx.redirect(f"/doc/{doc_id}")
         if result and result[1]:
             ctx.flash("ok", "子文档已创建，请选择入口文件")
             return ctx.redirect(f"/ver/{result[0]}/entry")
+        if ctx.upload_notice:
+            ctx.flash("warn", f"子文档「{name}」已创建。{ctx.upload_notice}")
+            return ctx.redirect(f"/req/{req_id}")
     ctx.flash("ok", f"子文档「{name}」已创建")
     return ctx.redirect(f"/req/{req_id}")

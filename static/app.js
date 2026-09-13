@@ -86,3 +86,16 @@
   modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
 })();
+
+// 选中 .html 文件时显示"只上传 HTML"确认框
+(function () {
+  document.querySelectorAll('input[type=file][data-previewable]').forEach(function (input) {
+    var box = input.closest('.field') && input.closest('.field').querySelector('.force-html');
+    if (!box) return;
+    input.addEventListener('change', function () {
+      var f = input.files[0];
+      box.hidden = !(f && /\.html?$/i.test(f.name));
+      if (box.hidden) box.querySelector('input').checked = false;
+    });
+  });
+})();
