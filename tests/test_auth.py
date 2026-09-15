@@ -154,7 +154,7 @@ def test_legacy_domain_redirects_admin_but_serves_public(tmp_path):
         assert r.status_code == 200
         # Caddy 把 X-Forwarded-Host 改成了源站域名，但 Worker 的 X-Original-Host 说明浏览器在新域名：不能跳转（否则死循环）
         r = c.get("/login", headers={"host": "old.example", "x-forwarded-host": "old.example", "x-original-host": "new.example"}, follow_redirects=False)
-        assert r.status_code == 200
+        assert r.status_code == 303 and r.headers["location"] == "/"  # 已登录 → 站内跳首页，而不是 301 去别的域名
         # 生成的链接用新域名
         assert f"http://new.example/s/{code}/" in c.get(f"/req/{rid}").text
         # POST 不重定向（避免丢表单）
