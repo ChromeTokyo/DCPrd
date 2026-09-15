@@ -15,14 +15,11 @@
   <div class="wrap">
     <a class="brand" href="/">{{ site_name }}</a>
     <nav class="nav">
-      <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>需求列表</a>
-      <a href="/req/new" {% if request.url.path == '/req/new' %}class="active"{% endif %}>新建需求</a>
+      <a href="/" {% if request.url.path == '/' or request.url.path.startswith(('/req/', '/doc/', '/ver/')) %}class="active"{% endif %}>需求列表</a>
       <a href="/items" {% if request.url.path.startswith('/items') %}class="active"{% endif %}>重点事项</a>
       {% if is_admin %}
       <a href="/admin/users" {% if request.url.path.startswith('/admin/users') %}class="active"{% endif %}>用户管理</a>
-      <a href="/admin/tags" {% if request.url.path.startswith('/admin/tags') %}class="active"{% endif %}>标签</a>
-      <a href="/admin/settings" {% if request.url.path.startswith('/admin/settings') %}class="active"{% endif %}>系统设置</a>
-      <a href="/admin/audit" {% if request.url.path.startswith('/admin/audit') %}class="active"{% endif %}>审计日志</a>
+      <a href="/admin/settings" {% if request.url.path.startswith(('/admin/settings', '/admin/tags', '/admin/audit')) %}class="active"{% endif %}>系统设置</a>
       {% endif %}
     </nav>
     <div class="me">

@@ -2,7 +2,8 @@
 {% from "_macros.html" import confirm_form, tag_chip %}
 {% block title %}标签管理 · {{ site_name }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>标签管理</h1></div>
+<div class="page-head"><h1>系统设置</h1></div>
+{% include "_admin_tabs.html" %}
 <section class="card">
   <h3>新增标签</h3>
   <form method="post" action="/admin/tags/new" class="form-row">

@@ -1,0 +1,5 @@
+<nav class="tabs subtabs">
+  <a href="/admin/settings" class="{% if request.url.path.startswith('/admin/settings') %}active{% endif %}">设置</a>
+  <a href="/admin/tags" class="{% if request.url.path.startswith('/admin/tags') %}active{% endif %}">标签</a>
+  <a href="/admin/audit" class="{% if request.url.path.startswith('/admin/audit') %}active{% endif %}">审计日志</a>
+</nav>

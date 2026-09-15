@@ -182,3 +182,4 @@ tr.overdue td{background:#fff7ed}
 .rd{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px}
 .rd.ok{background:#dcfce7;color:#166534}.rd.no{background:#fee2e2;color:#991b1b}
 select[multiple]{max-width:560px;width:100%}
+.subtabs{display:inline-flex;margin-bottom:14px}
