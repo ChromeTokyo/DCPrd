@@ -128,3 +128,31 @@ def test_single_sign_on_kicks_previous_session(superuser, client_factory):
     assert other_device.get("/", follow_redirects=False).status_code == 200
     # 旧设备被踢出
     assert superuser.get("/", follow_redirects=False).status_code == 302
+
+
+def test_legacy_domain_redirects_admin_but_serves_public(tmp_path):
+    from starlette.testclient import TestClient
+    from tests.conftest import make_config, create_single, html_file, share_code_of
+    from app.main import create_app
+    cfg = make_config(tmp_path, domain="new.example", legacy_domains=("old.example",))
+    app = create_app(cfg)
+    with TestClient(app, base_url="http://new.example") as c:
+        login(c, 1001, "S")
+        csrf = csrf_of(c)
+        rid = create_single(c, csrf, "跨域", file=html_file("a.html", "hi"))
+        code = share_code_of(c.get(f"/req/{rid}").text)
+        # 旧域名：公开路径照常，后台 301 到新域名
+        r = c.get(f"/s/{code}/", headers={"host": "old.example"})
+        assert r.status_code == 200 and "hi" in r.text
+        r = c.get(f"/req/{rid}?x=1", headers={"host": "old.example"}, follow_redirects=False)
+        assert r.status_code == 301 and r.headers["location"] == f"http://new.example/req/{rid}?x=1"
+        assert c.get("/login", headers={"host": "old.example"}, follow_redirects=False).status_code == 301
+        # 经代理：X-Forwarded-Host 为准
+        r = c.get("/login", headers={"host": "origin.internal", "x-forwarded-host": "old.example"}, follow_redirects=False)
+        assert r.status_code == 301
+        r = c.get("/", headers={"host": "origin.internal", "x-forwarded-host": "new.example"}, follow_redirects=False)
+        assert r.status_code == 200
+        # 生成的链接用新域名
+        assert f"http://new.example/s/{code}/" in c.get(f"/req/{rid}").text
+        # POST 不重定向（避免丢表单）
+        assert c.post("/logout", data={"csrf": csrf}, headers={"host": "old.example"}, follow_redirects=False).status_code == 303

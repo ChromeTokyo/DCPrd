@@ -21,7 +21,8 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      DOMAIN: ${DOMAIN:-localhost}
+      # Caddy 签证书用的源站域名；应用对外域名（DOMAIN）可以是 Cloudflare Pages 等前置代理
+      DOMAIN: ${ORIGIN_DOMAIN:-${DOMAIN:-localhost}}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

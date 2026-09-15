@@ -2,7 +2,7 @@
 
 自托管的产品需求文档（HTML / Axure、墨刀导出 zip）托管平台：上传即得公网免登录分享链接，所有历史版本永久保留，团队成员通过 Telegram 登录。完整需求见 [SPEC.md](SPEC.md)。
 
-- 线上地址：<https://dcpm.ddns.net>
+- 线上地址：<https://dcprd.pages.dev>（Cloudflare Pages 反向代理，见 [deploy/pages](deploy/pages/README.md)）；源站 <https://dcpm.ddns.net>，旧分享链接继续有效，旧域名上的后台页面 301 到新域名
 - 技术栈：Python 3.12 · FastAPI · Jinja2 · SQLite（WAL）· uvicorn · Caddy（自动 HTTPS）· Docker Compose
 - 仓库公开，**任何密钥都不得提交**（`.env` 已在 `.gitignore`，模板见 `.env.example`）
 
@@ -45,6 +45,14 @@ curl -fsSL https://raw.githubusercontent.com/ChromeTokyo/DCPrd/main/deploy/insta
 脚本是幂等的，做了这些事：安装 docker + compose 插件 → clone/更新 `/opt/dcpm` → 生成 `/opt/dcpm/.env`（已存在则保留）→ `docker compose up -d --build` → 安装每分钟检查 GitHub `main` 的自动更新 timer。
 
 前置条件：DNS 已指向服务器（`dig dcpm.ddns.net`），安全组放通 80/443；Telegram 里对 `@BotFather` 执行 `/setdomain` 把 `@dcprd_bot` 绑定到 `dcpm.ddns.net`，否则登录页不会出现 Telegram 按钮。
+
+## 域名与代理
+
+- `DOMAIN`：应用对外域名，生成的分享链接、邀请链接、Telegram 回调都用它（现为 `dcprd.pages.dev`）。
+- `ORIGIN_DOMAIN`：源站域名，Caddy 用它申请证书（`dcpm.ddns.net`）。
+- `LEGACY_DOMAINS`：历史域名，公开路径（`/s/`、`/v/`、`/p2/`、`/static/`）照常服务，后台 GET 请求 301 到 `DOMAIN`。判断域名优先取代理传来的 `X-Forwarded-Host`。
+- Cloudflare Pages 项目 `dcprd` 只有一个 `_worker.js`，把全部请求转给源站；部署命令见 deploy/pages/README.md。Telegram Bot 的 `/setdomain` 必须指向 `DOMAIN`。
+- 经 Cloudflare 的请求体上限 100 MB；超过的文件目前无法通过新域名上传。
 
 ## 常用运维
 

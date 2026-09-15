@@ -34,10 +34,25 @@ def get_ctx(request: Request):
         conn.close()
 
 
+PUBLIC_PREFIXES = ("/s/", "/v/", "/p2/", "/static/", "/healthz")
+
+
+def _external_host(request: Request) -> str:
+    """浏览器实际访问的域名：优先代理传来的 X-Forwarded-Host（Cloudflare Pages Worker 会设置）。"""
+    return (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip().lower()
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """后台页面加安全头；公开文档路径（/s/、/v/）不加 X-Frame-Options。"""
+    """后台页面加安全头；公开文档路径（/s/、/v/）不加 X-Frame-Options。旧域名上的后台页面 301 到主域名。"""
 
     async def dispatch(self, request, call_next):
+        cfg: Config = request.app.state.cfg
+        if cfg.legacy_domains and request.method in ("GET", "HEAD"):
+            host = _external_host(request)
+            path = request.url.path
+            if host in cfg.legacy_domains and host != cfg.domain.lower() and not path.startswith(PUBLIC_PREFIXES):
+                target = f"{cfg.base_url}{path}" + (f"?{request.url.query}" if request.url.query else "")
+                return RedirectResponse(target, status_code=301)
         # 上传上限预检查：超出 Content-Length 的请求在读取正文前拒绝
         if request.method == "POST":
             cl = request.headers.get("content-length")

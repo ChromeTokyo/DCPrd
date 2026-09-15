@@ -35,6 +35,7 @@ class Config:
     dev_mode: bool = False
     app_version: str = "dev"
     site_name: str = "DCPrd 需求文档"
+    legacy_domains: tuple[str, ...] = ()  # 旧域名：公开路径照常服务，后台页面 301 到 DOMAIN
 
     # 派生路径
     @property
@@ -96,6 +97,7 @@ def load_config() -> Config:
         dev_mode=_truthy(env.get("DEV_MODE")),
         app_version=env.get("APP_VERSION", "dev"),
         site_name=env.get("SITE_NAME", "DCPrd 需求文档"),
+        legacy_domains=tuple(d.strip().lower() for d in env.get("LEGACY_DOMAINS", "").split(",") if d.strip()),
     )
     cfg.ensure_dirs()
     cfg.ensure_secret_key()

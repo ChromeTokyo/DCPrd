@@ -6,7 +6,9 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/ChromeTokyo/DCPrd.git}"
 REPO_DIR="${REPO_DIR:-/opt/dcpm}"
-DOMAIN="${DOMAIN:-dcpm.ddns.net}"
+DOMAIN="${DOMAIN:-dcprd.pages.dev}"
+ORIGIN_DOMAIN="${ORIGIN_DOMAIN:-dcpm.ddns.net}"
+LEGACY_DOMAINS="${LEGACY_DOMAINS:-dcpm.ddns.net}"
 COMPOSE_VERSION="${COMPOSE_VERSION:-v2.35.1}"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -67,6 +69,8 @@ write_env() {
         echo "==> 生成 $env（请填写 TG_BOT_TOKEN）"
         cat >"$env" <<ENV
 DOMAIN=${DOMAIN}
+ORIGIN_DOMAIN=${ORIGIN_DOMAIN}
+LEGACY_DOMAINS=${LEGACY_DOMAINS}
 TG_BOT_TOKEN=${TG_BOT_TOKEN:-REPLACE_ME}
 TG_BOT_USERNAME=${TG_BOT_USERNAME:-dcprd_bot}
 JIRA_BASE_URL=${JIRA_BASE_URL:-https://dcjira.opscom666.com/jira}
@@ -102,7 +106,7 @@ start_stack
 install_timer
 
 echo
-echo "==> 完成。健康检查：curl -sS https://${DOMAIN}/healthz"
+echo "==> 完成。健康检查：curl -sS https://${ORIGIN_DOMAIN}/healthz"
 echo "    日志：cd ${REPO_DIR} && docker compose logs -f"
 if grep -q REPLACE_ME "$REPO_DIR/.env"; then
     echo "!!! 请编辑 ${REPO_DIR}/.env 填写 TG_BOT_TOKEN 后执行：cd ${REPO_DIR} && docker compose up -d"

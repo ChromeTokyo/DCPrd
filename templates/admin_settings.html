@@ -21,7 +21,7 @@
 <section class="card">
   <h3>只读信息</h3>
   <dl>
-    <dt>域名</dt><dd>{{ cfg.domain }}</dd>
+    <dt>域名</dt><dd>{{ cfg.domain }}{% if cfg.legacy_domains %} <span class="muted small">（历史域名：{{ cfg.legacy_domains|join('、') }}，仅公开链接可用）</span>{% endif %}</dd>
     <dt>Telegram Bot</dt><dd>@{{ cfg.tg_bot_username }}</dd>
     <dt>当前版本</dt><dd><code>{{ cfg.app_version }}</code></dd>
     <dt>数据目录</dt><dd><code>{{ cfg.data_dir }}</code></dd>
