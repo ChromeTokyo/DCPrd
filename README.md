@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/ChromeTokyo/DCPrd/main/deploy/insta
 
 - `DOMAIN`：应用对外域名，生成的分享链接、邀请链接、Telegram 回调都用它（现为 `dcprd.pages.dev`）。
 - `ORIGIN_DOMAIN`：源站域名，Caddy 用它申请证书（`dcpm.ddns.net`）。
-- `LEGACY_DOMAINS`：历史域名，公开路径（`/s/`、`/v/`、`/p2/`、`/static/`）照常服务，后台 GET 请求 301 到 `DOMAIN`。判断域名优先取代理传来的 `X-Forwarded-Host`。
+- `LEGACY_DOMAINS`：历史域名，公开路径（`/s/`、`/v/`、`/p2/`、`/static/`）照常服务，后台 GET 请求 301 到 `DOMAIN`。判断域名优先取 Worker 传来的 `X-Original-Host`（Caddy 会把 `X-Forwarded-Host` 覆盖为源站 Host）。
 - Cloudflare Pages 项目 `dcprd` 只有一个 `_worker.js`，把全部请求转给源站；部署命令见 deploy/pages/README.md。Telegram Bot 的 `/setdomain` 必须指向 `DOMAIN`。
 - 经 Cloudflare 的请求体上限 100 MB；超过的文件目前无法通过新域名上传。
 

@@ -11,6 +11,7 @@ export default {
     const headers = new Headers(request.headers);
     for (const h of HOP_BY_HOP) headers.delete(h);
     headers.set("X-Forwarded-Host", inUrl.host);
+    headers.set("X-Original-Host", inUrl.host); // Caddy 会覆盖 X-Forwarded-Host，源站以此为准
     headers.set("X-Forwarded-Proto", "https");
     const ip = request.headers.get("CF-Connecting-IP");
     if (ip) headers.set("X-Forwarded-For", ip);

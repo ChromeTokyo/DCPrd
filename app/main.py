@@ -38,8 +38,8 @@ PUBLIC_PREFIXES = ("/s/", "/v/", "/p2/", "/static/", "/healthz")
 
 
 def _external_host(request: Request) -> str:
-    """浏览器实际访问的域名：优先代理传来的 X-Forwarded-Host（Cloudflare Pages Worker 会设置）。"""
-    return (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip().lower()
+    """浏览器实际访问的域名。Pages Worker 设置 X-Original-Host（Caddy 会把 X-Forwarded-Host 覆盖成源站 Host，故不能只看它）。"""
+    return (request.headers.get("x-original-host") or request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip().lower()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
