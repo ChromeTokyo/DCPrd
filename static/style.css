@@ -157,3 +157,28 @@ body.public-dir{background:#f5f6f8}
 .force-html{display:block;margin-top:6px;color:#92400e;font-size:12px}
 .missing{margin-top:4px}.missing summary{cursor:pointer;list-style:none}.missing summary::-webkit-details-marker{display:none}
 .missing-list{margin:6px 0 0;padding-left:16px;font:12px ui-monospace,Menlo,monospace;max-height:200px;overflow:auto;color:#92400e}
+/* 通知 */
+.bell{position:relative;color:#374151;text-decoration:none!important;font-size:16px;padding:0 4px}
+.bell .badge{position:absolute;top:-6px;right:-8px;background:var(--danger);color:#fff;font-size:10px;line-height:1;padding:2px 5px;border-radius:8px;font-weight:600}
+.me-pref{color:#6b7280;text-decoration:none!important;font-size:15px}
+.notif-list{list-style:none;margin:0;padding:0}
+.notif-list li{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.notif-list li:last-child{border-bottom:none}
+.notif-list li.unread .n-title{font-weight:600}
+.notif-list li.unread{background:linear-gradient(90deg,#eff6ff 0,#fff 60%);margin:0 -20px;padding-left:20px;padding-right:20px}
+.n-main{flex:1;display:flex;flex-direction:column;gap:2px;color:var(--text);text-decoration:none!important}
+.n-body{color:#4b5563;white-space:pre-wrap}
+.st-off{background:#fee2e2;color:#991b1b}
+/* 重点事项 */
+tr.overdue td{background:#fff7ed}
+.timeline-list{list-style:none;margin:0;padding:0}
+.timeline-list li{padding:10px 0 10px 14px;border-left:3px solid #e5e7eb;margin-left:4px;margin-bottom:6px}
+.timeline-list li.tl-progress{border-left-color:var(--primary)}
+.timeline-list li.tl-complete{border-left-color:var(--ok)}
+.timeline-list li.tl-remind{border-left-color:var(--warn)}
+.tl-body{white-space:pre-wrap;margin:4px 0}
+.tl-files{margin:4px 0}
+.tl-reads{margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.rd{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px}
+.rd.ok{background:#dcfce7;color:#166534}.rd.no{background:#fee2e2;color:#991b1b}
+select[multiple]{max-width:560px;width:100%}

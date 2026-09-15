@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -150,6 +150,85 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 CREATE INDEX IF NOT EXISTS idx_comments_doc ON comments(document_id, id);
 
+CREATE TABLE IF NOT EXISTS notification_prefs (
+    user_id INTEGER NOT NULL,
+    kind    TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (user_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL,
+    kind          TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    body          TEXT NOT NULL DEFAULT '',
+    url           TEXT NOT NULL DEFAULT '',
+    ref_type      TEXT,
+    ref_id        INTEGER,
+    created_at    TEXT NOT NULL,
+    read_at       TEXT,
+    tg_message_id INTEGER,
+    tg_sent_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read_at, id);
+CREATE INDEX IF NOT EXISTS idx_notif_ref ON notifications(ref_type, ref_id);
+
+CREATE TABLE IF NOT EXISTS key_items (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    project          TEXT NOT NULL,
+    title            TEXT NOT NULL,
+    description      TEXT NOT NULL DEFAULT '',
+    frequency        TEXT NOT NULL DEFAULT 'weekly',   -- daily | weekly | biweekly | monthly
+    due_date         TEXT,
+    status           TEXT NOT NULL DEFAULT 'open',     -- open | done
+    created_by       INTEGER NOT NULL,
+    created_at       TEXT NOT NULL,
+    updated_by       INTEGER NOT NULL,
+    updated_at       TEXT NOT NULL,
+    completed_at     TEXT,
+    completed_by     INTEGER,
+    last_progress_at TEXT NOT NULL,
+    next_remind_at   TEXT,
+    deleted_at       TEXT,
+    deleted_by       INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS key_item_people (
+    item_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role    TEXT NOT NULL,                             -- owner | reporter
+    PRIMARY KEY (item_id, user_id, role)
+);
+
+CREATE TABLE IF NOT EXISTS key_item_requirements (
+    item_id        INTEGER NOT NULL,
+    requirement_id INTEGER NOT NULL,
+    PRIMARY KEY (item_id, requirement_id)
+);
+
+CREATE TABLE IF NOT EXISTS key_item_updates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    INTEGER NOT NULL,
+    kind       TEXT NOT NULL,                          -- progress | complete | reopen | edit | remind
+    body       TEXT NOT NULL DEFAULT '',
+    created_by INTEGER,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kiu_item ON key_item_updates(item_id, id);
+
+CREATE TABLE IF NOT EXISTS key_item_files (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id     INTEGER NOT NULL,
+    update_id   INTEGER,
+    filename    TEXT NOT NULL,
+    size_bytes  INTEGER NOT NULL DEFAULT 0,
+    stored_name TEXT NOT NULL,
+    uploaded_by INTEGER,
+    created_at  TEXT NOT NULL,
+    deleted_at  TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     at          TEXT NOT NULL,
@@ -206,6 +285,11 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
         vcols = {r["name"] for r in conn.execute("PRAGMA table_info(versions)")}
         if "missing_refs" not in vcols:
             conn.execute("ALTER TABLE versions ADD COLUMN missing_refs TEXT")
+        # v6：users 的 Bot 关注状态
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+        for col in ("bot_started_at", "bot_blocked_at", "bot_checked_at"):
+            if col not in ucols:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         for k, v in defaults.items():
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))

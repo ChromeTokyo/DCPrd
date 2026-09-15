@@ -99,7 +99,7 @@ def test_public_comments_and_notifications(app, superuser, client_factory):
     doc_id = int(re.search(r"/doc/(\d+)/upload", other.get(f"/req/{rid}").text).group(1))
     other.post(f"/doc/{doc_id}/upload", data={"csrf": csrf_of(other), "note": "乙的修改"}, files={"file": html_file("v2.html", "two")}, follow_redirects=False)
     assert sorted(t for t, _ in notifier.sent) == [1001, 9001]
-    assert "路人乙 上传了「留言需求」v2" in notifier.sent[0][1] and "乙的修改" in notifier.sent[0][1] and f"/req/{rid}" in notifier.sent[0][1]
+    assert "路人乙 上传了「留言需求」v2" in notifier.sent[0][1] and "乙的修改" in notifier.sent[0][1]
     notifier.sent.clear()
     # 待选择入口的 zip 不通知
     other.post(f"/doc/{doc_id}/upload", data={"csrf": csrf_of(other)}, files={"file": ("p.zip", make_zip({"a.html": "1", "b.html": "2"}), "application/zip")}, follow_redirects=False)
@@ -114,7 +114,7 @@ def test_public_comments_and_notifications(app, superuser, client_factory):
     r = anon.post(f"/s/{code}/__comments", data={"author": "测试同学", "body": "第二步按钮点不动 https://x.y", "version": "2"})
     assert r.status_code == 200 and r.json()["author"] == "测试同学" and r.json()["version"] == 2
     assert len(anon.get(f"/s/{code}/__comments").json()) == 1
-    assert sorted(t for t, _ in notifier.sent) == [1001, 9001] and "测试同学 在「留言需求」留言" in notifier.sent[0][1]
+    assert sorted(t for t, _ in notifier.sent) == [1001, 9001, 9002] and "测试同学 在「留言需求」留言" in notifier.sent[0][1]  # 乙上传过 → 也是干系人
     assert anon.get("/s/nonexistent00/__comments").status_code == 404
     # 后台显示、列表角标、标记处理、删除权限
     detail = superuser.get(f"/req/{rid}").text

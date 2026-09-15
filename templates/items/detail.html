@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import project_tag, confirm_form %}
+{% block title %}{{ item.title }} · 重点事项 · {{ site_name }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/items">重点事项</a> › {{ item.title }}</p>
+<div class="page-head">
+  <h1>{{ project_tag(item.project) }} {{ item.title }} {% if state == 'done' %}<span class="st st-live">已完成</span>{% elif state == 'overdue' %}<span class="st st-off">超期未更新</span>{% else %}<span class="st st-pending">进行中</span>{% endif %}</h1>
+  <div class="actions">
+    <a class="btn" href="/items/{{ item.id }}/edit">编辑</a>
+    {% if item.status == 'open' %}
+    <form method="post" action="/items/{{ item.id }}/status" class="inline" data-confirm="确定把「{{ item.title }}」标记为已完成？之后不再提醒。"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="status" value="done"><button class="btn btn-primary">标记完成</button></form>
+    {% else %}
+    <form method="post" action="/items/{{ item.id }}/status" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="status" value="open"><button class="btn">重新打开</button></form>
+    {% endif %}
+    {% if can_delete %}{{ confirm_form('/items/' ~ item.id ~ '/delete', csrf, '删除', '确定删除重点事项「' ~ item.title ~ '」？', 'btn btn-danger') }}{% endif %}
+  </div>
+</div>
+<section class="card info"><dl>
+  <dt>描述</dt><dd class="notes">{% if item.description %}{{ item.description|linkify }}{% else %}<span class="muted">—</span>{% endif %}</dd>
+  <dt>负责人</dt><dd>{% for u in owners %}{{ u.name }}{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
+  <dt>汇报对象</dt><dd>{% for u in reporters %}{{ u.name }}{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
+  <dt>提醒频率</dt><dd>{{ FREQUENCIES[item.frequency][0] }}{% if item.status == 'open' and item.next_remind_at %} · 下次提醒 {{ fmt_dt(item.next_remind_at) }}{% endif %}</dd>
+  <dt>截止日期</dt><dd>{{ item.due_date or '—' }}</dd>
+  <dt>关联需求</dt><dd>{% for r in reqs %}<a href="/req/{{ r.id }}">{{ project_tag(r.project) }} {{ r.name }}</a>{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
+  <dt>创建</dt><dd>{{ creator }} · {{ fmt_dt(item.created_at) }}{% if item.completed_at %} · 完成于 {{ fmt_dt(item.completed_at) }}{% endif %}</dd>
+</dl>
+{% if files_by_update.get(None) %}<p><strong>附件：</strong>{% for f in files_by_update[None] %}<a href="/items/{{ item.id }}/files/{{ f.id }}">{{ f.filename }}</a> <span class="muted small">({{ f.size_bytes|filesize }})</span>{% if not loop.last %}、{% endif %}{% endfor %}</p>{% endif %}
+</section>
+
+{% if item.status == 'open' %}
+<section class="card">
+  <h3>记录进展</h3>
+  <form method="post" action="/items/{{ item.id }}/progress" enctype="multipart/form-data" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><textarea name="body" rows="3" placeholder="这段时间做了什么、下一步是什么、有什么风险…"></textarea></div>
+    <div class="field"><label>附件（可多个）</label><input type="file" name="files" multiple></div>
+    <button class="btn btn-primary">提交进展</button> <span class="muted small">提交后提醒周期重新计时，负责人与汇报对象会收到通知。</span>
+  </form>
+</section>
+{% endif %}
+
+<section class="card">
+  <h3>进展记录 <span class="muted">({{ updates|length }})</span></h3>
+  <ul class="timeline-list">
+  {% for u in updates %}
+    <li class="tl-{{ u.kind }}">
+      <div class="tl-head"><span class="tag tag-kind">{{ UPDATE_KINDS.get(u.kind, u.kind) }}</span> <strong>{{ u.author or '系统' }}</strong> <span class="muted small">{{ fmt_dt(u.created_at) }}</span></div>
+      {% if u.body %}<div class="tl-body">{{ u.body|linkify }}</div>{% endif %}
+      {% if files_by_update.get(u.id) %}<div class="tl-files">{% for f in files_by_update[u.id] %}<a href="/items/{{ item.id }}/files/{{ f.id }}">📎 {{ f.filename }}</a> <span class="muted small">({{ f.size_bytes|filesize }})</span>{% if is_admin or f.uploaded_by == user.id or item.created_by == user.id %} {{ confirm_form('/items/' ~ item.id ~ '/files/' ~ f.id ~ '/delete', csrf, '×', '删除附件「' ~ f.filename ~ '」？', 'btn-x') }}{% endif %} {% endfor %}</div>{% endif %}
+      {% set rs = reads.get(u.id) %}{% if rs %}
+      <div class="tl-reads small">
+        {% set read = rs|rejectattr('has_unread')|list %}{% set unread_ = rs|selectattr('has_unread')|list %}
+        {% if read %}<span class="muted">已读：</span>{% for r in read %}<span class="rd ok" title="{{ fmt_dt(r.read_at) }}">{{ r.name }}</span>{% endfor %}{% endif %}
+        {% if unread_ %}<span class="muted">未读：</span>{% for r in unread_ %}<span class="rd no">{{ r.name }}</span>{% endfor %}{% endif %}
+      </div>{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

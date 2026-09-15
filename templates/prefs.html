@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}我的提醒 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>我的提醒</h1></div>
+<section class="card">
+  <h3>Telegram Bot</h3>
+  {% if following %}
+    <p><span class="st st-live">✓ 已关注</span> 通知会同时推送到 Telegram，消息下方的「已读」按钮与站内已读互通。</p>
+  {% else %}
+    <p><span class="st st-off">{% if following is false %}✗ 未关注{% else %}? 尚未确认{% endif %}</span> 请在 Telegram 打开 <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener">@{{ bot_username }}</a> 并点 <strong>Start</strong>，Bot 会自动记录；或点右侧按钮检测。</p>
+  {% endif %}
+  <div class="form-actions">
+    <form method="post" action="/me/bot-check" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/me/notifications"><button class="btn btn-sm">检测关注状态</button></form>
+    <form method="post" action="/me/notify-test" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/me/notifications"><button class="btn btn-sm">发送测试消息</button></form>
+  </div>
+</section>
+<form method="post" action="/me/notifications" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h3>接收哪些通知</h3>
+  <p class="muted small">关闭的类型既不会推送 Telegram，也不会出现在站内通知里。</p>
+  {% for k, label in KINDS.items() %}
+  <div class="field"><label class="check"><input type="checkbox" name="kind_{{ k }}" value="1" {% if prefs[k] %}checked{% endif %}> {{ label }}</label></div>
+  {% endfor %}
+  <div class="form-actions"><button class="btn btn-primary">保存</button></div>
+</form>
+{% endblock %}

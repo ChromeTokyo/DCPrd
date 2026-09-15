@@ -174,19 +174,19 @@ def _serve_version(ctx: Ctx, doc, ver, rel: str, prefix: str, cache: str) -> Res
 
 # ---------- 公开留言（免登录；页面在沙箱内为 opaque origin，需允许跨域） ----------
 _CORS = {"access-control-allow-origin": "*", "cache-control": "no-store"}
-_rate: dict[str, list[float]] = {}
 COMMENT_LIMIT_PER_10MIN = 10
 
 
-def _rate_ok(ip: str) -> bool:
+def _rate_ok(request: Request, ip: str) -> bool:
     import time as _t
+    store: dict = request.app.state.__dict__.setdefault("comment_rate", {})
     now = _t.time()
-    hits = [t for t in _rate.get(ip, []) if now - t < 600]
+    hits = [t for t in store.get(ip, []) if now - t < 600]
     if len(hits) >= COMMENT_LIMIT_PER_10MIN:
-        _rate[ip] = hits
+        store[ip] = hits
         return False
     hits.append(now)
-    _rate[ip] = hits
+    store[ip] = hits
     return True
 
 
@@ -215,14 +215,14 @@ async def public_comments_create(code: str, request: Request, ctx: Ctx = Depends
     if not author or not body:
         return JSONResponse({"error": "请填写名字和留言内容"}, status_code=400, headers=_CORS)
     ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "") or "").split(",")[0].strip()
-    if not _rate_ok(ip or "?"):
+    if not _rate_ok(request, ip or "?"):
         return JSONResponse({"error": "留言太频繁，请稍后再试"}, status_code=429, headers=_CORS)
     cid = db.insert(ctx.conn, "comments", {"document_id": doc["id"], "version_number": int(version) if version.isdigit() else None, "author": author, "body": body, "ip": ip, "created_at": db.utcnow()})
     req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ?", (doc["requirement_id"],))
     if req:
-        from ..notify import notify_requirement
+        from ..notify import notify_doc_event
         title = req["name"] if req["kind"] == "single" else f"{req['name']} · {doc['name']}"
-        notify_requirement(ctx.conn, ctx.notifier, req["id"], f"【{ctx.settings.get('site_name') or 'DCPrd'}】{author} 在「{title}」留言：\n{body[:300]}\n{ctx.base_url}/req/{req['id']}#comments")
+        notify_doc_event(ctx.conn, ctx.notifier, ctx.base_url, req, doc, "comment", f"{author} 在「{title}」留言", body[:300], f"/req/{req['id']}#comments", None)
     c = db.one(ctx.conn, "SELECT * FROM comments WHERE id = ?", (cid,))
     return JSONResponse(_comment_json(ctx, c), headers=_CORS)
 

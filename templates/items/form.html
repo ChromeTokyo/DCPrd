@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}新增重点事项{% else %}编辑重点事项{% endif %} · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{% if mode == 'new' %}新增重点事项{% else %}编辑重点事项{% endif %}</h1></div>
+<form method="post" action="{% if mode == 'new' %}/items/new{% else %}/items/{{ item.id }}/edit{% endif %}" enctype="multipart/form-data" class="card form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="field"><label>项目 <span class="req">*</span></label><div class="radios">{% for key, label in PROJECTS.items() %}<label class="radio"><input type="radio" name="project" value="{{ key }}" {% if (item and item.project == key) or (not item and (project == key or (not project and loop.first))) %}checked{% endif %} required> {{ label }}</label>{% endfor %}</div></div>
+  <div class="field"><label>标题 <span class="req">*</span></label><input type="text" name="title" value="{{ item.title if item else '' }}" required maxlength="200"></div>
+  <div class="field"><label>描述</label><textarea name="description" rows="5">{{ item.description if item else '' }}</textarea></div>
+  <div class="two-col">
+    <div class="field"><label>负责人（多选，负责更新进展）</label><div class="checks">{% for u in users %}<label class="check"><input type="checkbox" name="owners" value="{{ u.id }}" {% if u.id in owner_ids %}checked{% endif %}> {{ u.name }}</label>{% endfor %}</div></div>
+    <div class="field"><label>汇报对象（多选，接收进展与提醒，也可以更新）</label><div class="checks">{% for u in users %}<label class="check"><input type="checkbox" name="reporters" value="{{ u.id }}" {% if u.id in reporter_ids %}checked{% endif %}> {{ u.name }}</label>{% endfor %}</div></div>
+  </div>
+  <div class="two-col">
+    <div class="field"><label>提醒频率</label><select name="frequency">{% for k, v in FREQUENCIES.items() %}<option value="{{ k }}" {% if (item and item.frequency == k) or (not item and k == 'weekly') %}selected{% endif %}>{{ v[0] }}（{{ v[1] }} 天无进展则提醒）</option>{% endfor %}</select><span class="hint">滚动周期：从最近一次进展起算，到期未更新即提醒负责人与汇报对象，之后每个周期再提醒；写进展后重新计时。</span></div>
+    <div class="field"><label>截止日期（可选）</label><input type="date" name="due_date" value="{{ item.due_date or '' if item else '' }}"></div>
+  </div>
+  <div class="field"><label>关联需求（可选，可多选）</label>
+    <select name="requirements" multiple size="6">{% for r in requirements %}<option value="{{ r.id }}" {% if r.id in req_ids %}selected{% endif %}>[{{ PROJECTS[r.project] }}] {{ r.name }}</option>{% endfor %}</select>
+    <span class="hint">按住 Cmd / Ctrl 多选。</span></div>
+  {% if mode == 'new' %}<div class="field"><label>附件（可多个）</label><input type="file" name="files" multiple></div>{% endif %}
+  <div class="form-actions"><button type="submit" class="btn btn-primary">{% if mode == 'new' %}创建{% else %}保存{% endif %}</button><a class="btn" href="{% if mode == 'new' %}/items{% else %}/items/{{ item.id }}{% endif %}">取消</a></div>
+</form>
+{% endblock %}

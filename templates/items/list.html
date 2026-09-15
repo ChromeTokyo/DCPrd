@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import project_tag %}
+{% block title %}重点事项 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>重点事项</h1><a class="btn btn-primary" href="/items/new{% if project %}?project={{ project }}{% endif %}">新增重点事项</a></div>
+<div class="toolbar">
+  <nav class="tabs">
+    <a href="/items?status={{ status }}&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if not project %}active{% endif %}">全部</a>
+    {% for key, label in PROJECTS.items() %}<a href="/items?project={{ key }}&status={{ status }}&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ label }}</a>{% endfor %}
+  </nav>
+  <nav class="tabs">
+    <a href="/items?project={{ project }}&status=open&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if status == 'open' %}active{% endif %}">进行中</a>
+    <a href="/items?project={{ project }}&status=done&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if status == 'done' %}active{% endif %}">已完成</a>
+    <a href="/items?project={{ project }}&status=all&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if status not in ('open','done') %}active{% endif %}">全部</a>
+  </nav>
+  <a class="btn {% if mine %}btn-primary{% endif %}" href="/items?project={{ project }}&status={{ status }}&q={{ q|urlquote }}{% if not mine %}&mine=1{% endif %}">与我相关</a>
+  <form method="get" action="/items" class="search"><input type="hidden" name="project" value="{{ project }}"><input type="hidden" name="status" value="{{ status }}">{% if mine %}<input type="hidden" name="mine" value="1">{% endif %}<input type="search" name="q" value="{{ q }}" placeholder="搜索标题 / 描述 / 人"><button class="btn">搜索</button></form>
+</div>
+{% if items %}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th>事项</th><th>负责人</th><th>汇报对象</th><th>频率</th><th>最近进展</th><th>截止</th><th>状态</th></tr></thead>
+  <tbody>
+  {% for it in items %}{% set i = it.i %}
+  <tr class="{% if it.state == 'overdue' %}overdue{% endif %}">
+    <td>{{ project_tag(i.project) }} <a href="/items/{{ i.id }}">{{ i.title }}</a>{% if i.progress_count %} <span class="muted small">{{ i.progress_count }} 条进展</span>{% endif %}</td>
+    <td>{{ i.owner_names or '—' }}</td>
+    <td>{{ i.reporter_names or '—' }}</td>
+    <td>{{ FREQUENCIES[i.frequency][0] }}</td>
+    <td class="nowrap">{{ fmt_dt(i.last_progress_at) }}</td>
+    <td class="nowrap">{{ i.due_date or '—' }}</td>
+    <td>{% if it.state == 'done' %}<span class="st st-live">已完成</span>{% elif it.state == 'overdue' %}<span class="st st-off">超期未更新</span>{% else %}<span class="st st-pending">进行中</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<div class="empty">没有重点事项。</div>{% endif %}
+{% endblock %}

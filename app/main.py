@@ -115,6 +115,22 @@ def backup_database(cfg: Config) -> Path | None:
     return dest
 
 
+async def _reminder_loop(app: FastAPI, cfg: Config) -> None:
+    from .routes.items import run_reminders
+
+    await asyncio.sleep(20)
+    while True:
+        try:
+            conn = db.connect(cfg.db_path)
+            try:
+                await asyncio.to_thread(run_reminders, cfg, conn, app.state.notifier, cfg.base_url)
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001
+            log.exception("重点事项提醒失败")
+        await asyncio.sleep(60)
+
+
 async def _backup_loop(cfg: Config) -> None:
     while True:
         try:
@@ -138,13 +154,16 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = asyncio.create_task(_backup_loop(cfg))
+        tasks = [asyncio.create_task(_backup_loop(cfg)), asyncio.create_task(_reminder_loop(app, cfg))]
+        if not app.state.notifier.dry_run:
+            asyncio.get_running_loop().run_in_executor(None, app.state.notifier.set_webhook, f"{cfg.base_url}/tg/webhook")
         try:
             yield
         finally:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+            for t in tasks:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
 
     app = FastAPI(title="DCPrd", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.cfg = cfg
@@ -188,9 +207,9 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def healthz():
         return {"ok": True, "version": cfg.app_version}
 
-    from .routes import admin, auth, documents, extras, public, requirements, versions
+    from .routes import admin, auth, documents, extras, items, notifications, public, requirements, versions
 
-    for mod in (auth, requirements, documents, versions, admin, extras, public):
+    for mod in (auth, requirements, documents, versions, admin, extras, items, notifications, public):
         app.include_router(mod.router)
     from .v2 import public as v2_public
     from .v2 import routes as v2_routes

@@ -240,8 +240,10 @@ async def notify_test(request: Request, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    ok = await run_in_threadpool(ctx.notifier.send, ctx.user["tg_id"], f"【{ctx.settings.get('site_name') or 'DCPrd'}】测试消息：通知已连通，之后你负责或创建的需求有新版本或留言时会收到提醒。")
+    ok = await run_in_threadpool(ctx.notifier.send, ctx.user["tg_id"], f"【{ctx.settings.get('site_name') or 'DCPrd'}】测试消息：通知已连通。可在 {ctx.base_url}/me/notifications 设置要接收的类型。")
     if ok:
+        from ..notify import mark_bot_started
+        mark_bot_started(ctx.conn, ctx.user["tg_id"])
         ctx.flash("ok", "测试消息已发送，请查看 Telegram")
     else:
         ctx.flash("err", f"发送失败：请先在 Telegram 里打开 @{ctx.cfg.tg_bot_username} 并点 Start，然后重试")

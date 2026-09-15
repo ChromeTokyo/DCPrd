@@ -63,6 +63,6 @@
 {% else %}
 <div class="empty">{% if q or project or fav or tag %}没有匹配的需求。{% else %}还没有需求，<a href="/req/new">新建一个</a>。{% endif %}</div>
 {% endif %}
-<p class="muted small notify-tip">Telegram 通知：在 Telegram 里打开 <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener">@{{ bot_username }}</a> 并点 Start 后，你负责或创建的需求有新版本、有留言时会收到提醒。
+<p class="muted small notify-tip">Telegram 通知：在 Telegram 里打开 <a href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener">@{{ bot_username }}</a> 并点 Start 后即可收到提醒，要接收哪些类型在 <a href="/me/notifications">我的提醒</a> 里设置。
 <form method="post" action="/me/notify-test" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/"><button class="btn btn-sm">发送测试消息</button></form></p>
 {% endblock %}

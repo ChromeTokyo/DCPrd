@@ -17,6 +17,7 @@
     <nav class="nav">
       <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>需求列表</a>
       <a href="/req/new" {% if request.url.path == '/req/new' %}class="active"{% endif %}>新建需求</a>
+      <a href="/items" {% if request.url.path.startswith('/items') %}class="active"{% endif %}>重点事项</a>
       {% if is_admin %}
       <a href="/admin/users" {% if request.url.path.startswith('/admin/users') %}class="active"{% endif %}>用户管理</a>
       <a href="/admin/tags" {% if request.url.path.startswith('/admin/tags') %}class="active"{% endif %}>标签</a>
@@ -25,6 +26,8 @@
       {% endif %}
     </nav>
     <div class="me">
+      <a class="bell {% if unread %}has{% endif %}" href="/notifications" title="通知">🔔{% if unread %}<span class="badge">{{ unread if unread < 100 else '99+' }}</span>{% endif %}</a>
+      <a class="me-pref" href="/me/notifications" title="我的提醒设置">⚙</a>
       {% if user.tg_photo_url %}<img class="avatar" src="{{ user.tg_photo_url }}" alt="">{% endif %}
       <span class="me-name" title="{{ user.role }}">{{ user.name }}{% if user.role == 'super' %} <span class="role">超管</span>{% elif user.role == 'admin' %} <span class="role">管理员</span>{% endif %}</span>
       <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-link" type="submit">退出</button></form>

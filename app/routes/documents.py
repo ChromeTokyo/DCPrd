@@ -40,15 +40,11 @@ async def handle_upload(ctx: Ctx, doc, upload: UploadFile | None, note: str, for
     queries.touch_requirement(ctx.conn, doc["requirement_id"], ctx.user["id"])
     vid, needs_entry = result
     if not needs_entry:
-        from ..notify import notify_requirement
+        from ..notify import notify_doc_event
         ver = db.one(ctx.conn, "SELECT number FROM versions WHERE id = ?", (vid,))
         req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ?", (doc["requirement_id"],))
         title = req["name"] if req["kind"] == "single" else f"{req['name']} · {doc['name']}"
-        text = f"【{ctx.settings.get('site_name') or 'DCPrd'}】{ctx.user['name']} 上传了「{title}」v{ver['number']}"
-        if note and note.strip():
-            text += f"\n说明：{note.strip()[:200]}"
-        text += f"\n{ctx.base_url}/req/{doc['requirement_id']}"
-        notify_requirement(ctx.conn, ctx.notifier, doc["requirement_id"], text, exclude_user_id=ctx.user["id"])
+        notify_doc_event(ctx.conn, ctx.notifier, ctx.base_url, req, doc, "version", f"{ctx.user['name']} 上传了「{title}」v{ver['number']}", f"说明：{note.strip()[:200]}" if note and note.strip() else "", f"/req/{doc['requirement_id']}", ctx.user["id"])
     return result
 
 

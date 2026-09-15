@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}通知 · {{ site_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>通知 {% if unread %}<span class="muted">未读 {{ unread }}</span>{% endif %}</h1>
+  <div class="actions">
+    <a class="btn {% if not show_all %}btn-primary{% endif %}" href="/notifications">未读</a><a class="btn {% if show_all %}btn-primary{% endif %}" href="/notifications?all=1">全部</a>
+    {% if unread %}<form method="post" action="/notifications/read-all" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">全部标为已读</button></form>{% endif %}
+    <a class="btn" href="/me/notifications">提醒设置</a>
+  </div>
+</div>
+{% if following is false %}<div class="flash flash-warn">你还没有关注 Bot，通知只能在这里看到。到 <a href="/me/notifications">我的提醒</a> 里按提示关注后，Telegram 也会收到。</div>{% endif %}
+<section class="card">
+{% if items %}
+<ul class="notif-list">
+{% for n in items %}
+  <li class="{% if not n.read_at %}unread{% endif %}">
+    <a class="n-main" href="/notifications/{{ n.id }}/go">
+      <span class="n-title">{{ n.title }}</span>
+      {% if n.body %}<span class="n-body">{{ n.body }}</span>{% endif %}
+      <span class="muted small">{{ fmt_dt(n.created_at, '%m-%d %H:%M') }} · {{ KINDS.get(n.kind, n.kind) }}{% if n.tg_sent_at %} · 已推送 Telegram{% endif %}{% if n.read_at %} · 已读 {{ fmt_dt(n.read_at, '%m-%d %H:%M') }}{% endif %}</span>
+    </a>
+    {% if not n.read_at %}<form method="post" action="/notifications/{{ n.id }}/read" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ request.url.path }}{% if show_all %}?all=1{% endif %}"><button class="btn btn-sm">已读</button></form>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% else %}<p class="muted">{% if show_all %}还没有任何通知。{% else %}没有未读通知。{% endif %}</p>{% endif %}
+</section>
+{% endblock %}

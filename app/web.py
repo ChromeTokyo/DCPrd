@@ -124,6 +124,13 @@ class Ctx:
         return self.request.app.state.notifier
 
     @property
+    def unread(self) -> int:
+        if not self.user:
+            return 0
+        from .notify import unread_count
+        return unread_count(self.conn, self.user["id"])
+
+    @property
     def tz(self) -> ZoneInfo:
         try:
             return ZoneInfo(self.settings.get("timezone") or self.cfg.timezone)
@@ -272,6 +279,7 @@ class Ctx:
             jira_base_url=(self.settings.get("jira_base_url") or self.cfg.jira_base_url).rstrip("/"),
             request=self.request,
             fmt_dt=self.fmt_dt,
+            unread=self.unread,
         )
         body = env.get_template(template).render(**context)
         resp = HTMLResponse(body, status_code=status_code)
