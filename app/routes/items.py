@@ -34,12 +34,8 @@ def freq_label(frequency: str, hours: int) -> str:
         return FREQUENCIES[frequency][0]
     if hours % 24 == 0:
         d = hours // 24
-        if d == 7:
-            return "每周"
-        if 7 % d == 0 and d < 7:
-            return f"每 {d} 天（每周 {7 // d} 次）"
-        return f"每 {d} 天"
-    if 168 % hours == 0:
+        return {1: "每日", 7: "每周", 14: "双周", 30: "每月"}.get(d, f"每 {d} 天")
+    if hours > 24 and 168 % hours == 0:
         return f"每周 {168 // hours} 次"
     return f"每 {hours} 小时"
 
