@@ -1,5 +1,6 @@
 :root{--bg:#f5f6f8;--card:#fff;--text:#1f2329;--muted:#6b7280;--line:#e5e7eb;--primary:#2563eb;--primary-d:#1d4ed8;--danger:#dc2626;--ok:#16a34a;--warn:#d97706;--eb:#0ea5e9;--im:#8b5cf6;--tk:#f59e0b;--radius:8px}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;padding:0}
 body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;color:var(--text);background:var(--bg)}
 a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}

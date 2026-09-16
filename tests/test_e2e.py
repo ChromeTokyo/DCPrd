@@ -140,9 +140,17 @@ def test_full_flow(browser, live_url):
     admin.wait_for_url(req1_url)
     admin.goto(f"{base_url}/")
     assert "我的收藏" in admin.content() and "最近访问" in admin.content()
+    # 重点事项表单：自定义间隔行只在选"自定义"时显示
+    admin.goto(f"{base_url}/items/new")
+    assert not admin.locator("#custom-freq").is_visible()
+    admin.select_option("#freq-select", "custom")
+    assert admin.locator("#custom-freq").is_visible()
     # 上传前预览：选文件 → 预览按钮 → 弹层 iframe 渲染
     admin.goto(req1_url)
+    assert not admin.locator("section.card .preview-btn").first.is_visible()  # 未选文件时隐藏
+    assert not admin.locator("section.card .force-html").first.is_visible()
     admin.set_input_files("section.card input[name=file]", {"name": "v3.html", "mimeType": "text/html", "buffer": b"<h1 id='pv'>preview me</h1>"})
+    assert admin.locator("section.card .preview-btn").first.is_visible() and admin.locator("section.card .force-html").first.is_visible()
     admin.click("section.card .preview-btn")
     assert admin.locator("#preview-modal").is_visible()
     admin.frame_locator("#preview-frame").locator("#pv").wait_for()
