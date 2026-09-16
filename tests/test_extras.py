@@ -90,7 +90,7 @@ def test_public_comments_and_notifications(app, superuser, client_factory):
     assert notifier.dry_run
     owner = invite(superuser, client_factory, "负责人甲", 9001)
     other = invite(superuser, client_factory, "路人乙", 9002)
-    owner_id = int(re.search(r'负责人甲</td>.*?/admin/users/(\d+)/', superuser.get("/admin/users").text, re.S).group(1))
+    owner_id = int(re.search(r'负责人甲</span>.*?/admin/users/(\d+)/', superuser.get("/admin/users").text, re.S).group(1))
     # super 创建需求，负责人甲为 owner
     rid = create_single(superuser, csrf, "留言需求", owners=owner_id, file=html_file("v1.html", "one"))
     code = share_code_of(superuser.get(f"/req/{rid}").text)

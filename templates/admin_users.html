@@ -21,7 +21,15 @@
     <tbody>
     {% for u in users %}
     <tr>
-      <td>{% if u.tg_photo_url %}<img class="avatar" src="{{ u.tg_photo_url }}" alt="">{% endif %} {{ u.name }}</td>
+      <td>{% if u.tg_photo_url %}<img class="avatar" src="{{ u.tg_photo_url }}" alt="">{% endif %} <span class="uname">{{ u.name }}</span>{% if u.note %}<br><span class="muted small">{{ u.note }}</span>{% endif %}
+        <details class="user-edit"><summary class="small">修改</summary>
+          <form method="post" action="/admin/users/{{ u.id }}/edit" class="form">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="text" name="name" value="{{ u.name }}" maxlength="100" placeholder="名称" required>
+            <input type="text" name="note" value="{{ u.note or '' }}" maxlength="200" placeholder="备注：职责 / 部门 / 联系方式" style="margin-top:4px">
+            <button class="btn btn-sm" style="margin-top:4px">保存</button>
+          </form>
+        </details></td>
       <td>{% if u.role == 'super' %}<span class="tag tag-super">超级管理员</span>{% elif u.role == 'admin' %}<span class="tag tag-admin">管理员</span>{% else %}用户{% endif %}</td>
       <td>{% if u.tg_id %}{% if u.tg_username %}@{{ u.tg_username }}{% else %}{{ u.tg_first_name }} {{ u.tg_last_name or '' }}{% endif %} <span class="muted small">(id {{ u.tg_id }}，绑定于 {{ fmt_dt(u.bound_at) }})</span>{% else %}<span class="muted">未绑定</span>{% endif %}</td>
       <td>{% if not u.tg_id %}<span class="muted">—</span>{% elif u.bot_blocked_at and (not u.bot_started_at or u.bot_blocked_at >= u.bot_started_at) %}<span class="st st-off" title="{{ fmt_dt(u.bot_blocked_at) }}">✗ 未关注</span>{% elif u.bot_started_at %}<span class="st st-live" title="{{ fmt_dt(u.bot_started_at) }}">✓ 已关注</span>{% else %}<span class="st" title="尚未检测">? 未知</span>{% endif %}</td>

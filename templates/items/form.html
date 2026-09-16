@@ -12,7 +12,13 @@
     <div class="field"><label>汇报对象（多选，接收进展与提醒，也可以更新）</label><div class="checks">{% for u in users %}<label class="check"><input type="checkbox" name="reporters" value="{{ u.id }}" {% if u.id in reporter_ids %}checked{% endif %}> {{ u.name }}</label>{% endfor %}</div></div>
   </div>
   <div class="two-col">
-    <div class="field"><label>提醒频率</label><select name="frequency">{% for k, v in FREQUENCIES.items() %}<option value="{{ k }}" {% if (item and item.frequency == k) or (not item and k == 'weekly') %}selected{% endif %}>{{ v[0] }}（{{ v[1] }} 天无进展则提醒）</option>{% endfor %}</select><span class="hint">滚动周期：从最近一次进展起算，到期未更新即提醒负责人与汇报对象，之后每个周期再提醒；写进展后重新计时。</span></div>
+    <div class="field"><label>提醒频率</label>
+      <select name="frequency" id="freq-select">{% for k, v in FREQUENCIES.items() %}<option value="{{ k }}" {% if (item and item.frequency == k) or (not item and k == 'weekly') %}selected{% endif %}>{{ v[0] }}{% if v[1] %}（{% if v[1] % 24 == 0 %}{{ v[1] // 24 }} 天{% else %}{{ v[1] }} 小时{% endif %}无进展则提醒）{% endif %}</option>{% endfor %}</select>
+      <div class="form-row custom-freq" id="custom-freq" {% if not (item and item.frequency == 'custom') %}hidden{% endif %}>
+        <span>每</span><input type="number" name="custom_value" value="{{ custom.value }}" min="1" step="1" style="max-width:90px">
+        <select name="custom_unit"><option value="days" {% if custom.unit == 'days' %}selected{% endif %}>天</option><option value="hours" {% if custom.unit == 'hours' %}selected{% endif %}>小时</option><option value="per_week" {% if custom.unit == 'per_week' %}selected{% endif %}>次 / 周</option></select>
+      </div>
+      <span class="hint">滚动周期：从最近一次进展起算，到期未更新即提醒负责人与汇报对象，之后每个周期再提醒；写进展后重新计时。自定义可填"每 3 天""每 12 小时""每周 3 次"。</span></div>
     <div class="field"><label>截止日期（可选）</label><input type="date" name="due_date" value="{{ item.due_date or '' if item else '' }}"></div>
   </div>
   <div class="field"><label>关联需求（可选，可多选）</label>
@@ -21,4 +27,5 @@
   {% if mode == 'new' %}<div class="field"><label>附件（可多个）</label><input type="file" name="files" multiple></div>{% endif %}
   <div class="form-actions"><button type="submit" class="btn btn-primary">{% if mode == 'new' %}创建{% else %}保存{% endif %}</button><a class="btn" href="{% if mode == 'new' %}/items{% else %}/items/{{ item.id }}{% endif %}">取消</a></div>
 </form>
+<script>(function(){var s=document.getElementById('freq-select'),c=document.getElementById('custom-freq');if(!s||!c)return;function sync(){c.hidden=s.value!=='custom';}s.addEventListener('change',sync);sync();})();</script>
 {% endblock %}

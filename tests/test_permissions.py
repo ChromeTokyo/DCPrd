@@ -11,7 +11,7 @@ def invite_user(admin, name: str, factory, tg_id: int):
     c = factory()
     c.get(f"/invite/{codes[-1]}")
     assert login(c, tg_id, name).status_code == 302
-    uid = int(re.search(rf'{name}</td>.*?/admin/users/(\d+)/', admin.get("/admin/users").text, re.S).group(1))
+    uid = int(re.search(rf'{name}</span>.*?/admin/users/(\d+)/', admin.get("/admin/users").text, re.S).group(1))
     return c, uid
 
 
@@ -57,7 +57,7 @@ def test_permission_matrix(superuser, client_factory):
     assert "delete_version" in audit and "delete_requirement" in audit and "toggle_admin" in audit
 
     # super 不能被删除 / 降级
-    super_id = int(re.search(r"Super</td>.*?/admin/users/(\d+)/", superuser.get("/admin/users").text, re.S).group(1))
+    super_id = int(re.search(r"Super</span>.*?/admin/users/(\d+)/", superuser.get("/admin/users").text, re.S).group(1))
     assert bob.post(f"/admin/users/{super_id}/delete", data={"csrf": b_csrf}, follow_redirects=False).status_code == 403
     assert bob.post(f"/admin/users/{super_id}/unbind", data={"csrf": b_csrf}, follow_redirects=False).status_code == 403
 

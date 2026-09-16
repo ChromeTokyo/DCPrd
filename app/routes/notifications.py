@@ -75,6 +75,21 @@ async def prefs_save(request: Request, ctx: Ctx = Depends(get_ctx)):
     return ctx.redirect("/me/notifications")
 
 
+@router.post("/me/profile")
+async def my_profile(request: Request, ctx: Ctx = Depends(get_ctx)):
+    """成员修改自己的显示名称。"""
+    ctx.require_user()
+    form = await request.form()
+    ctx.check_csrf(form)
+    name = str(form.get("name") or "").strip()[:100]
+    if not name:
+        ctx.flash("err", "名称不能为空")
+        return ctx.redirect("/me/notifications")
+    db.update(ctx.conn, "users", ctx.user["id"], {"name": name})
+    ctx.flash("ok", "名称已更新")
+    return ctx.redirect("/me/notifications")
+
+
 @router.post("/me/bot-check")
 async def my_bot_check(request: Request, ctx: Ctx = Depends(get_ctx)):
     """本人手动检测是否已关注 Bot。"""

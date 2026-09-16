@@ -25,7 +25,7 @@
     <td>{{ project_tag(i.project) }} <a href="/items/{{ i.id }}">{{ i.title }}</a>{% if i.progress_count %} <span class="muted small">{{ i.progress_count }} 条进展</span>{% endif %}</td>
     <td>{{ i.owner_names or '—' }}</td>
     <td>{{ i.reporter_names or '—' }}</td>
-    <td>{{ FREQUENCIES[i.frequency][0] }}</td>
+    <td>{{ it.freq }}</td>
     <td class="nowrap">{{ fmt_dt(i.last_progress_at) }}</td>
     <td class="nowrap">{{ i.due_date or '—' }}</td>
     <td>{% if it.state == 'done' %}<span class="st st-live">已完成</span>{% elif it.state == 'overdue' %}<span class="st st-off">超期未更新</span>{% else %}<span class="st st-pending">进行中</span>{% endif %}</td>

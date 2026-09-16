@@ -183,3 +183,4 @@ tr.overdue td{background:#fff7ed}
 .rd.ok{background:#dcfce7;color:#166534}.rd.no{background:#fee2e2;color:#991b1b}
 select[multiple]{max-width:560px;width:100%}
 .subtabs{display:inline-flex;margin-bottom:14px}
+.user-edit summary{cursor:pointer;color:var(--primary);list-style:none}.user-edit summary::-webkit-details-marker{display:none}.user-edit .form{margin-top:6px;max-width:260px}.custom-freq{margin-top:6px}

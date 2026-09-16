@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_by        INTEGER,
     created_at        TEXT NOT NULL,
     deleted_at        TEXT,
-    deleted_by        INTEGER
+    deleted_by        INTEGER,
+    note              TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -179,7 +180,8 @@ CREATE TABLE IF NOT EXISTS key_items (
     project          TEXT NOT NULL,
     title            TEXT NOT NULL,
     description      TEXT NOT NULL DEFAULT '',
-    frequency        TEXT NOT NULL DEFAULT 'weekly',   -- daily | weekly | biweekly | monthly
+    frequency        TEXT NOT NULL DEFAULT 'weekly',   -- 预设名或 custom
+    interval_hours   INTEGER NOT NULL DEFAULT 168,     -- 提醒间隔（小时）
     due_date         TEXT,
     status           TEXT NOT NULL DEFAULT 'open',     -- open | done
     created_by       INTEGER NOT NULL,
@@ -290,6 +292,13 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
         for col in ("bot_started_at", "bot_blocked_at", "bot_checked_at"):
             if col not in ucols:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        # v7：users.note、key_items.interval_hours
+        if "note" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+        kcols = {r["name"] for r in conn.execute("PRAGMA table_info(key_items)")}
+        if "interval_hours" not in kcols:
+            conn.execute("ALTER TABLE key_items ADD COLUMN interval_hours INTEGER NOT NULL DEFAULT 168")
+            conn.execute("UPDATE key_items SET interval_hours = CASE frequency WHEN 'daily' THEN 24 WHEN 'biweekly' THEN 336 WHEN 'monthly' THEN 720 ELSE 168 END")
         conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         for k, v in defaults.items():
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))

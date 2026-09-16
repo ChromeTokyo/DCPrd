@@ -19,7 +19,7 @@
   <dt>描述</dt><dd class="notes">{% if item.description %}{{ item.description|linkify }}{% else %}<span class="muted">—</span>{% endif %}</dd>
   <dt>负责人</dt><dd>{% for u in owners %}{{ u.name }}{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
   <dt>汇报对象</dt><dd>{% for u in reporters %}{{ u.name }}{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
-  <dt>提醒频率</dt><dd>{{ FREQUENCIES[item.frequency][0] }}{% if item.status == 'open' and item.next_remind_at %} · 下次提醒 {{ fmt_dt(item.next_remind_at) }}{% endif %}</dd>
+  <dt>提醒频率</dt><dd>{{ freq }}{% if item.status == 'open' and item.next_remind_at %} · 下次提醒 {{ fmt_dt(item.next_remind_at) }}{% endif %}</dd>
   <dt>截止日期</dt><dd>{{ item.due_date or '—' }}</dd>
   <dt>关联需求</dt><dd>{% for r in reqs %}<a href="/req/{{ r.id }}">{{ project_tag(r.project) }} {{ r.name }}</a>{% if not loop.last %}、{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</dd>
   <dt>创建</dt><dd>{{ creator }} · {{ fmt_dt(item.created_at) }}{% if item.completed_at %} · 完成于 {{ fmt_dt(item.completed_at) }}{% endif %}</dd>

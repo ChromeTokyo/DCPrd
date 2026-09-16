@@ -9,7 +9,7 @@ from tests.test_extras import invite
 
 
 def uid_of(admin, name):
-    return int(re.search(rf'{name}</td>.*?/admin/users/(\d+)/', admin.get("/admin/users").text, re.S).group(1))
+    return int(re.search(rf'{name}</span>.*?/admin/users/(\d+)/', admin.get("/admin/users").text, re.S).group(1))
 
 
 def test_notification_center_and_prefs(app, superuser, client_factory):
@@ -125,7 +125,7 @@ def test_key_items_flow_and_reminders(app, cfg, superuser, client_factory):
     assert r.status_code == 303
     item_id = int(re.search(r"/items/(\d+)", r.headers["location"]).group(1))
     detail = superuser.get(f"/items/{item_id}").text
-    assert "Q4 支付改版" in detail and "负责人" in detail and "老板" in detail and "每周" in detail and "2026-12-31" in detail and "plan.md" in detail and "x.png" in detail and "关联需求" in detail
+    assert "Q4 支付改版" in detail and "负责人" in detail and "老板" in detail and "每周" in detail and "2026-12-31" in detail and "每周 2 次" in superuser.get("/items/new").text and "plan.md" in detail and "x.png" in detail and "关联需求" in detail
     assert sorted(t for t, _ in notifier.sent) == [8101, 8102] and "新建了「Q4 支付改版」" in notifier.sent[0][1]
     # 已读状态：两人未读
     assert "未读：" in detail and detail.count('class="rd no"') == 2
@@ -184,4 +184,41 @@ def test_key_items_flow_and_reminders(app, cfg, superuser, client_factory):
     assert owner.post(f"/items/{item_id}/delete", data={"csrf": csrf_of(owner)}, follow_redirects=False).status_code == 403
     assert superuser.post(f"/items/{item_id}/delete", data={"csrf": csrf}, follow_redirects=False).status_code == 303
     assert superuser.get(f"/items/{item_id}").status_code == 404
+    conn.close()
+
+
+def test_custom_intervals_and_member_edit(cfg, superuser, client_factory):
+    from app.routes.items import freq_label, parse_interval
+    assert freq_label("weekly", 168) == "每周" and freq_label("twice_weekly", 84) == "每周 2 次" and freq_label("custom", 72) == "每 3 天"
+    assert freq_label("custom", 56) == "每周 3 次" and freq_label("custom", 12) == "每 12 小时" and freq_label("custom", 48) == "每 2 天"
+    csrf = csrf_of(superuser)
+    # 自定义：每周 3 次 → 56 小时
+    r = superuser.post("/items/new", data={"csrf": csrf, "project": "eb", "title": "自定义间隔", "frequency": "custom", "custom_value": "3", "custom_unit": "per_week"}, follow_redirects=False)
+    item_id = int(re.search(r"/items/(\d+)", r.headers["location"]).group(1))
+    conn = db.connect(cfg.db_path)
+    row = db.one(conn, "SELECT frequency, interval_hours, last_progress_at, next_remind_at FROM key_items WHERE id = ?", (item_id,))
+    assert row["frequency"] == "custom" and row["interval_hours"] == 56
+    assert (db.parse_utc(row["next_remind_at"]) - db.parse_utc(row["last_progress_at"])) == dt.timedelta(hours=56)
+    d = superuser.get(f"/items/{item_id}").text
+    assert "每周 3 次" in d
+    edit = superuser.get(f"/items/{item_id}/edit").text
+    assert 'name="custom_value" value="3"' in edit and '<option value="per_week" selected' in edit
+    # 每 12 小时；非法值
+    superuser.post(f"/items/{item_id}/edit", data={"csrf": csrf, "project": "eb", "title": "自定义间隔", "frequency": "custom", "custom_value": "12", "custom_unit": "hours"}, follow_redirects=False)
+    assert "每 12 小时" in superuser.get(f"/items/{item_id}").text and "提醒频率 每周 3 次 → 每 12 小时" in superuser.get(f"/items/{item_id}").text
+    assert superuser.post(f"/items/{item_id}/edit", data={"csrf": csrf, "project": "eb", "title": "x", "frequency": "custom", "custom_value": "0", "custom_unit": "days"}, follow_redirects=False).status_code == 400
+    # 预设 每 2 天
+    superuser.post(f"/items/{item_id}/edit", data={"csrf": csrf, "project": "eb", "title": "自定义间隔", "frequency": "every2days"}, follow_redirects=False)
+    assert db.one(conn, "SELECT interval_hours FROM key_items WHERE id = ?", (item_id,))["interval_hours"] == 48 and "每 2 天" in superuser.get("/items").text
+    # 成员信息：管理员改名+备注；成员改自己名
+    alice = invite(superuser, client_factory, "Alice", 8301)
+    aid = uid_of(superuser, "Alice")
+    assert superuser.post(f"/admin/users/{aid}/edit", data={"csrf": csrf, "name": "爱丽丝", "note": "EB 产品经理"}, follow_redirects=False).status_code == 303
+    users = superuser.get("/admin/users").text
+    assert "爱丽丝" in users and "EB 产品经理" in users and "edit_user" in superuser.get("/admin/audit").text
+    assert "爱丽丝" in alice.get("/").text
+    assert alice.post(f"/admin/users/{aid}/edit", data={"csrf": csrf_of(alice), "name": "x"}, follow_redirects=False).status_code == 403
+    assert alice.post("/me/profile", data={"csrf": csrf_of(alice), "name": "Alice Wang"}, follow_redirects=False).status_code == 303
+    assert "Alice Wang" in alice.get("/").text and "EB 产品经理" in alice.get("/me/notifications").text
+    assert superuser.post(f"/admin/users/{aid}/edit", data={"csrf": csrf, "name": ""}, follow_redirects=True).text.find("名称不能为空") > 0
     conn.close()

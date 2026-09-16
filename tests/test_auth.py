@@ -74,11 +74,11 @@ def test_invite_bind_and_duplicate(superuser, client_factory):
 
     # 解绑张三 → 会话失效 → 重新生成的链接可绑新账号
     users_page = superuser.get("/admin/users").text
-    zhang_id = re.search(r'张三</td>.*?/admin/users/(\d+)/unbind', users_page, re.S).group(1)
+    zhang_id = re.search(r'张三</span>.*?/admin/users/(\d+)/unbind', users_page, re.S).group(1)
     r = superuser.post(f"/admin/users/{zhang_id}/unbind", data={"csrf": csrf}, follow_redirects=False)
     assert r.status_code == 303
     assert zhang.get("/", follow_redirects=False).status_code == 302
-    code3 = re.search(r'张三</td>.*?/invite/([A-Za-z0-9_\-]+)', superuser.get("/admin/users").text, re.S).group(1)
+    code3 = re.search(r'张三</span>.*?/invite/([A-Za-z0-9_\-]+)', superuser.get("/admin/users").text, re.S).group(1)
     assert code3 != code
     fresh = client_factory()
     fresh.get(f"/invite/{code3}")

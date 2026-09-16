@@ -49,6 +49,25 @@ async def users_new(request: Request, ctx: Ctx = Depends(get_ctx)):
     return ctx.redirect("/admin/users")
 
 
+@router.post("/users/{user_id}/edit")
+async def users_edit(user_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
+    """管理员修改成员名称与备注（职责 / 联系方式等）。"""
+    ctx.require_admin()
+    form = await request.form()
+    ctx.check_csrf(form)
+    u = _user_or_404(ctx, user_id)
+    name = str(form.get("name") or "").strip()[:100]
+    note = str(form.get("note") or "").strip()[:200]
+    if not name:
+        ctx.flash("err", "名称不能为空")
+        return ctx.redirect("/admin/users")
+    db.update(ctx.conn, "users", user_id, {"name": name, "note": note})
+    if name != u["name"] or note != (u["note"] or ""):
+        db.audit(ctx.conn, ctx.user, "edit_user", "user", user_id, {"name": [u["name"], name], "note": [u["note"] or "", note]})
+    ctx.flash("ok", "成员信息已保存")
+    return ctx.redirect("/admin/users")
+
+
 @router.post("/users/{user_id}/regen-invite")
 async def users_regen(user_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     ctx.require_admin()
