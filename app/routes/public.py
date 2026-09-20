@@ -78,7 +78,10 @@ def _widget_data(ctx: Ctx, doc, ver) -> dict | None:
     req = db.one(ctx.conn, "SELECT * FROM requirements WHERE id = ?", (doc["requirement_id"],))
     if not req:
         return None
+    import hashlib as _hashlib
     owners = [o["name"] for o in queries.owners_of(ctx.conn, req["id"])]
+    notes = (req["notes"] or "").strip()
+    doc_notes = (doc["notes"] or "").strip() if req["kind"] == "compound" else ""
     versions = [
         v for v in db.all_rows(
             ctx.conn,
@@ -93,8 +96,10 @@ def _widget_data(ctx: Ctx, doc, ver) -> dict | None:
         "req": {
             "name": req["name"], "project": req["project"], "projectLabel": PROJECTS.get(req["project"], req["project"].upper()),
             "owners": owners, "jira": [{"key": k, "url": f"{jira_base}/browse/{k}"} for k in split_jira_keys(req["jira_keys"])],
+            "notes": notes[:4000],
         },
-        "doc": {"name": doc["name"], "compound": req["kind"] == "compound", "dirUrl": f"/s/{req['share_code']}/" if req["kind"] == "compound" else None},
+        "doc": {"name": doc["name"], "compound": req["kind"] == "compound", "dirUrl": f"/s/{req['share_code']}/" if req["kind"] == "compound" else None, "notes": doc_notes[:4000]},
+        "notesKey": _hashlib.md5((notes + "\x00" + doc_notes).encode("utf-8")).hexdigest()[:12] if (notes or doc_notes) else "",
         "current": ver["number"],
         "latest": latest,
         "latestUrl": f"/s/{doc['share_code']}/",

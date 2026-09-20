@@ -222,3 +222,49 @@ def test_custom_intervals_and_member_edit(cfg, superuser, client_factory):
     assert "Alice Wang" in alice.get("/").text and "EB 产品经理" in alice.get("/me/notifications").text
     assert superuser.post(f"/admin/users/{aid}/edit", data={"csrf": csrf, "name": ""}, follow_redirects=True).text.find("名称不能为空") > 0
     conn.close()
+
+
+def test_nudge(app, superuser, client_factory):
+    csrf = csrf_of(superuser)
+    notifier = app.state.notifier
+    owner = invite(superuser, client_factory, "小张", 8401)
+    boss = invite(superuser, client_factory, "老王", 8402)
+    owner_id, boss_id = uid_of(superuser, "小张"), uid_of(superuser, "老王")
+    r = superuser.post("/items/new", data={"csrf": csrf, "project": "eb", "title": "对账单优化", "frequency": "weekly", "owners": [owner_id], "reporters": [boss_id]}, follow_redirects=False)
+    item_id = int(re.search(r"/items/(\d+)", r.headers["location"]).group(1))
+    # 负责人自己看不到催办按钮、也不能催
+    assert 'id="nudge-open"' not in owner.get(f"/items/{item_id}").text
+    assert owner.post(f"/items/{item_id}/nudge", data={"csrf": csrf_of(owner)}, follow_redirects=False).status_code == 403
+    # 汇报对象能催：通知只发给负责人，时间线留痕
+    assert 'id="nudge-open"' in boss.get(f"/items/{item_id}").text
+    notifier.sent.clear()
+    r = boss.post(f"/items/{item_id}/nudge", data={"csrf": csrf_of(boss), "body": "周五要对外同步"}, follow_redirects=True)
+    assert "已催办：小张" in r.text
+    assert [t for t, _ in notifier.sent] == [8401]
+    msg = notifier.sent[0][1]
+    assert "老王 催你更新「对账单优化」的进展" in msg and "周五要对外同步" in msg and "距上次进展已 0 天" in msg
+    d = boss.get(f"/items/{item_id}").text
+    assert "催办" in d and "周五要对外同步" in d
+    assert "有人催办我负责的重点事项" in owner.get("/notifications").text or "催你更新" in owner.get("/notifications").text
+    # 冷却：同一人 60 分钟内不重复
+    notifier.sent.clear()
+    r = boss.post(f"/items/{item_id}/nudge", data={"csrf": csrf_of(boss)}, follow_redirects=True)
+    assert "60 分钟内不重复催办" in r.text and notifier.sent == []
+    # 创建人（非负责人）也能催，且不受他人冷却影响
+    r = superuser.post(f"/items/{item_id}/nudge", data={"csrf": csrf}, follow_redirects=True)
+    assert "已催办：小张" in r.text and [t for t, _ in notifier.sent] == [8401]
+    # 负责人关掉 item_nudge 后不再推送
+    owner.post("/me/notifications", data={"csrf": csrf_of(owner), "kind_item_update": "1"}, follow_redirects=False)
+    alice = invite(superuser, client_factory, "小李", 8403)
+    superuser.post(f"/items/{item_id}/edit", data={"csrf": csrf, "project": "eb", "title": "对账单优化", "frequency": "weekly", "owners": [owner_id], "reporters": [boss_id, uid_of(superuser, "小李")]}, follow_redirects=False)
+    notifier.sent.clear()
+    alice.post(f"/items/{item_id}/nudge", data={"csrf": csrf_of(alice)}, follow_redirects=False)
+    assert notifier.sent == []
+    # 已完成的事项不能催
+    superuser.post(f"/items/{item_id}/status", data={"csrf": csrf, "status": "done"}, follow_redirects=False)
+    assert 'id="nudge-open"' not in boss.get(f"/items/{item_id}").text
+    assert "已完成的事项不需要催办" in boss.post(f"/items/{item_id}/nudge", data={"csrf": csrf_of(boss)}, follow_redirects=True).text
+    # 不填负责人时创建人自动成为负责人，催办即催到他
+    r = superuser.post("/items/new", data={"csrf": csrf, "project": "im", "title": "无主事项", "frequency": "weekly", "reporters": [boss_id]}, follow_redirects=False)
+    id2 = int(re.search(r"/items/(\d+)", r.headers["location"]).group(1))
+    assert "已催办：Super" in boss.post(f"/items/{id2}/nudge", data={"csrf": csrf_of(boss)}, follow_redirects=True).text

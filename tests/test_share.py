@@ -270,3 +270,33 @@ def test_image_and_markdown_uploads(superuser):
     # 不支持的类型
     superuser.post(f"/doc/{doc_id_of(superuser, rid)}/upload", data={"csrf": csrf}, files={"file": ("a.pdf", b"%PDF", "application/pdf")}, follow_redirects=False)
     assert "只支持" in superuser.get(f"/req/{rid}").text
+
+
+def test_public_notes_visible(superuser, client_factory):
+    csrf = csrf_of(superuser)
+    note = "重要：本次只改支付页，购物车保持不变\n参考 https://wiki.example.com/pay"
+    rid = create_single(superuser, csrf, "带备注需求", notes=note, file=html_file("a.html", "hi"))
+    code = share_code_of(superuser.get(f"/req/{rid}").text)
+    anon = client_factory()
+    page = anon.get(f"/s/{code}/").text
+    import json
+    d = json.loads(re.search(r"var D = (\{.*?\});\n", page).group(1))
+    assert d["req"]["notes"] == note and d["notesKey"] and d["doc"]["notes"] == ""
+    assert "notesBox" in page and "dcpm-notes-" in page  # 备注块 + 首次自动展开
+    # 无备注时不出现标记
+    rid2 = create_single(superuser, csrf, "无备注", file=html_file("b.html", "x"))
+    code2 = share_code_of(superuser.get(f"/req/{rid2}").text)
+    d2 = json.loads(re.search(r"var D = (\{.*?\});\n", anon.get(f"/s/{code2}/").text).group(1))
+    assert d2["req"]["notes"] == "" and d2["notesKey"] == ""
+    # 复合需求：目录页展示需求备注与子文档备注
+    superuser.post(f"/req/{rid}/convert", data={"csrf": csrf}, follow_redirects=False)
+    superuser.post(f"/req/{rid}/docs/new", data={"csrf": csrf, "name": "子文档B", "notes": "这页待产品确认"}, files={"file": html_file("c.html", "c")}, follow_redirects=False)
+    detail = superuser.get(f"/req/{rid}").text
+    dir_code = re.search(r"目录入口页.*?/s/([a-z0-9]{12})/", detail, re.S).group(1)
+    dir_page = anon.get(f"/s/{dir_code}/").text
+    assert "需求备注" in dir_page and "只改支付页" in dir_page and 'href="https://wiki.example.com/pay"' in dir_page
+    assert "这页待产品确认" in dir_page
+    # 子文档页的小菜单带本文档备注
+    b_code = re.search(r'/s/([a-z0-9]{12})/">子文档B', dir_page).group(1)
+    db_ = json.loads(re.search(r"var D = (\{.*?\});\n", anon.get(f"/s/{b_code}/").text).group(1))
+    assert db_["doc"]["notes"] == "这页待产品确认" and db_["req"]["notes"] == note

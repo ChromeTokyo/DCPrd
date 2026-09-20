@@ -63,7 +63,8 @@ def parse_interval(form) -> tuple[str, int]:
         raise HTTPException(400, "自定义间隔需在 1 小时到 1 年之间")
     return "custom", hours
 STATUS = {"open": "进行中", "done": "已完成"}
-UPDATE_KINDS = {"progress": "进展", "complete": "标记完成", "reopen": "重新打开", "edit": "修改信息", "remind": "系统提醒", "create": "创建"}
+UPDATE_KINDS = {"progress": "进展", "complete": "标记完成", "reopen": "重新打开", "edit": "修改信息", "remind": "系统提醒", "create": "创建", "nudge": "催办"}
+NUDGE_COOLDOWN_MINUTES = 60
 
 
 def _iso(d: dt.datetime) -> str:
@@ -281,6 +282,7 @@ async def item_detail(item_id: int, ctx: Ctx = Depends(get_ctx)):
     return ctx.render(
         "items/detail.html", item=item, owners=people(ctx.conn, item_id, "owner"), reporters=people(ctx.conn, item_id, "reporter"), updates=updates, files_by_update=files_by_update,
         reads=reads, reqs=reqs, FREQUENCIES=FREQUENCIES, STATUS=STATUS, UPDATE_KINDS=UPDATE_KINDS, state=_due_state(item, db.utcnow()), freq=freq_label(item["frequency"], item["interval_hours"]),
+        can_nudge=can_nudge(ctx, item, [u["id"] for u in people(ctx.conn, item_id, "owner")]), last_nudge=last_nudge_at(ctx.conn, item_id, ctx.user["id"]), nudge_cooldown=NUDGE_COOLDOWN_MINUTES,
         can_delete=ctx.is_admin or item["created_by"] == ctx.user["id"], creator=queries.user_name(ctx.conn, item["created_by"]),
     )
 
@@ -302,6 +304,53 @@ async def item_progress(item_id: int, request: Request, ctx: Ctx = Depends(get_c
     db.update(ctx.conn, "key_items", item_id, {"last_progress_at": now, "next_remind_at": next_remind(now, item["interval_hours"]), "updated_by": ctx.user["id"], "updated_at": now})
     _notify_item(ctx, item, f"【重点事项】{ctx.user['name']} 更新了「{item['title']}」的进展", (body[:300] + (f"\n附件：{'、'.join(names)}" if names else "")).strip(), update_id=uid)
     ctx.flash("ok", "进展已记录，提醒周期已重置")
+    return ctx.redirect(f"/items/{item_id}")
+
+
+def can_nudge(ctx: Ctx, item, owner_ids: list[int]) -> bool:
+    """催办：汇报对象、创建人、管理员可以催；只负责不汇报的人不用催自己。"""
+    if item["status"] != "open":
+        return False
+    if ctx.user["id"] in owner_ids and ctx.user["id"] not in [u["id"] for u in people(ctx.conn, item["id"], "reporter")]:
+        return False
+    return True
+
+
+def last_nudge_at(conn, item_id: int, user_id: int) -> str | None:
+    row = db.one(conn, "SELECT created_at FROM key_item_updates WHERE item_id = ? AND kind = 'nudge' AND created_by = ? ORDER BY id DESC LIMIT 1", (item_id, user_id))
+    return row["created_at"] if row else None
+
+
+@router.post("/{item_id}/nudge")
+async def item_nudge(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
+    """催办：提醒负责人尽快更新进展。"""
+    ctx.require_user()
+    form = await request.form()
+    ctx.check_csrf(form)
+    item = item_or_404(ctx.conn, item_id)
+    owners = people(ctx.conn, item_id, "owner")
+    owner_ids = [u["id"] for u in owners]
+    if item["status"] != "open":
+        ctx.flash("err", "已完成的事项不需要催办")
+        return ctx.redirect(f"/items/{item_id}")
+    if not can_nudge(ctx, item, owner_ids):
+        raise HTTPException(403, "你是该事项的负责人，不需要催办自己")
+    if not owner_ids:
+        ctx.flash("err", "该事项还没有负责人，请先在编辑里指定")
+        return ctx.redirect(f"/items/{item_id}")
+    last = last_nudge_at(ctx.conn, item_id, ctx.user["id"])
+    if last and (db.parse_utc(db.utcnow()) - db.parse_utc(last)) < dt.timedelta(minutes=NUDGE_COOLDOWN_MINUTES):
+        ctx.flash("err", f"你刚刚催过了，{NUDGE_COOLDOWN_MINUTES} 分钟内不重复催办")
+        return ctx.redirect(f"/items/{item_id}")
+    msg = str(form.get("body") or "").strip()[:300]
+    last_progress = db.parse_utc(item["last_progress_at"])
+    days = max(0, (db.parse_utc(db.utcnow()) - last_progress).days) if last_progress else 0
+    uid = _log(ctx.conn, item_id, "nudge", msg, ctx.user["id"])
+    title = f"【催办】{ctx.user['name']} 催你更新「{item['title']}」的进展"
+    body = (msg + "\n" if msg else "") + f"距上次进展已 {days} 天" + (f"；截止 {item['due_date']}" if item["due_date"] else "")
+    notify_users(ctx.conn, ctx.notifier, ctx.base_url, owner_ids, "item_nudge", title, body, f"/items/{item_id}", "item_update", uid, exclude=ctx.user["id"])
+    db.update(ctx.conn, "key_items", item_id, {"updated_at": db.utcnow(), "updated_by": ctx.user["id"]})
+    ctx.flash("ok", f"已催办：{'、'.join(u['name'] for u in owners if u['id'] != ctx.user['id'])}")
     return ctx.redirect(f"/items/{item_id}")
 
 

@@ -7,6 +7,7 @@
   <h1>{{ project_tag(item.project) }} {{ item.title }} {% if state == 'done' %}<span class="st st-live">已完成</span>{% elif state == 'overdue' %}<span class="st st-off">超期未更新</span>{% else %}<span class="st st-pending">进行中</span>{% endif %}</h1>
   <div class="actions">
     <a class="btn" href="/items/{{ item.id }}/edit">编辑</a>
+    {% if can_nudge %}<button type="button" class="btn btn-nudge" id="nudge-open">📣 催办</button>{% endif %}
     {% if item.status == 'open' %}
     <form method="post" action="/items/{{ item.id }}/status" class="inline" data-confirm="确定把「{{ item.title }}」标记为已完成？之后不再提醒。"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="status" value="done"><button class="btn btn-primary">标记完成</button></form>
     {% else %}
@@ -57,4 +58,22 @@
   {% endfor %}
   </ul>
 </section>
+{% if can_nudge %}
+<div class="modal" id="nudge-modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <h3 style="margin-bottom:8px">催办「{{ item.title }}」</h3>
+    <p class="muted small">会给负责人（{% for u in owners %}{{ u.name }}{% if not loop.last %}、{% endif %}{% else %}未指定{% endfor %}）发送站内通知与 Telegram 消息，并记入进展时间线。{{ nudge_cooldown }} 分钟内每人只能催一次。</p>
+    <form method="post" action="/items/{{ item.id }}/nudge" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="field"><textarea name="body" rows="3" placeholder="要说的话（可选）：例如 周五要对外同步，请今天更新进展"></textarea></div>
+      <div class="modal-actions"><button type="button" class="btn" id="nudge-cancel">取消</button><button type="submit" class="btn btn-nudge">发送催办</button></div>
+    </form>
+  </div>
+</div>
+<script>(function(){var o=document.getElementById('nudge-open'),m=document.getElementById('nudge-modal'),c=document.getElementById('nudge-cancel');if(!o||!m)return;
+o.addEventListener('click',function(){m.hidden=false;var t=m.querySelector('textarea');if(t)t.focus();});
+c.addEventListener('click',function(){m.hidden=true;});
+m.addEventListener('click',function(e){if(e.target===m)m.hidden=true;});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')m.hidden=true;});})();</script>
+{% endif %}
 {% endblock %}

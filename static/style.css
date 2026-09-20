@@ -185,3 +185,13 @@ tr.overdue td{background:#fff7ed}
 select[multiple]{max-width:560px;width:100%}
 .subtabs{display:inline-flex;margin-bottom:14px}
 .user-edit summary{cursor:pointer;color:var(--primary);list-style:none}.user-edit summary::-webkit-details-marker{display:none}.user-edit .form{margin-top:6px;max-width:260px}.custom-freq{margin-top:6px}
+
+.btn-nudge{background:#d97706;border-color:#d97706;color:#fff}
+.btn-nudge:hover{background:#b45309}
+.timeline-list li.tl-nudge{border-left-color:#d97706;background:#fffbeb}
+
+/* 公开页备注 */
+.pd-notes{background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:14px 18px;margin:0 0 16px}
+.pd-notes h2{margin:0 0 6px;font-size:14px;color:#92400e}
+.pd-notes-body{white-space:pre-wrap;word-break:break-word;color:#1f2329}
+.pd-note{margin-top:6px;background:#fffbeb;border-left:3px solid #f59e0b;padding:4px 10px;border-radius:0 4px 4px 0;white-space:pre-wrap;color:#78350f;font-size:13px}

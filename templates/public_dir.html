@@ -8,12 +8,16 @@
     <h1>{{ req.name }}</h1>
     <p class="muted">共 {{ docs|length }} 份文档 · 更新于 {{ fmt_dt(req.updated_at) }} · <a href="/s/{{ req.share_code }}/__export">打包下载全部文档</a></p>
   </header>
+  {% if req.notes %}
+  <section class="pd-notes"><h2>✎ 需求备注</h2><div class="pd-notes-body">{{ req.notes|linkify }}</div></section>
+  {% endif %}
   <ol class="pd-list">
   {% for item in docs %}
     <li class="pd-item {% if not item.latest %}pd-empty{% endif %}">
       <div class="pd-main">
         <div class="pd-name">{% if item.latest %}<a href="/s/{{ item.doc.share_code }}/">{{ item.doc.name }}</a>{% else %}{{ item.doc.name }}{% endif %}</div>
         <div class="pd-meta muted small">{% if item.latest %}v{{ item.latest.number }} · {{ item.latest.uploader_name or '（已删除用户）' }} · {{ fmt_dt(item.latest.uploaded_at) }}{% else %}暂无发布版本{% endif %}</div>
+        {% if item.doc.notes %}<div class="pd-note">✎ {{ item.doc.notes|linkify }}</div>{% endif %}
       </div>
       {% if item.latest %}<a class="btn btn-sm btn-primary" href="/s/{{ item.doc.share_code }}/">打开</a>{% endif %}
     </li>

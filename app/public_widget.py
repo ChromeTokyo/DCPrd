@@ -12,7 +12,7 @@ _BODY_END = re.compile(rb"</body\s*>", re.I)
 WIDGET_JS = r"""
 (function(){
   var D = __DATA__;
-  var T = {info:'需求信息', owners:'负责人', updated:'更新时间', versions:'历史版本', latest:'最新', current:'当前', history:'历史版本', dir:'返回目录', close:'收起', none:'—', viewingOld:'你正在查看历史版本，', toLatest:'前往最新版', by:'', jira:'Jira', tabInfo:'信息', tabComments:'留言', download:'打包下载', file:'原文件', yourName:'你的名字（必填）', yourComment:'留言内容：问题、建议或确认', send:'发送', sending:'发送中…', noComments:'还没有留言，欢迎第一个提出。', resolved:'已处理', loadFail:'留言加载失败', needBoth:'请填写名字和留言内容'};
+  var T = {info:'需求信息', owners:'负责人', updated:'更新时间', versions:'历史版本', latest:'最新', current:'当前', history:'历史版本', dir:'返回目录', close:'收起', none:'—', viewingOld:'你正在查看历史版本，', toLatest:'前往最新版', by:'', jira:'Jira', tabInfo:'信息', tabComments:'留言', download:'打包下载', file:'原文件', notes:'需求备注', docNotes:'本文档备注', notesTip:'来自需求方的重要说明', yourName:'你的名字（必填）', yourComment:'留言内容：问题、建议或确认', send:'发送', sending:'发送中…', noComments:'还没有留言，欢迎第一个提出。', resolved:'已处理', loadFail:'留言加载失败', needBoth:'请填写名字和留言内容'};
   function el(tag, attrs, children){ var e = document.createElement(tag); for (var k in (attrs||{})) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'html') e.innerHTML = attrs[k]; else e.setAttribute(k, attrs[k]); } (children||[]).forEach(function(c){ if (c) e.appendChild(c); }); return e; }
   var host = el('div', {id:'dcpm-widget-host'});
   host.style.cssText = 'all:initial;position:fixed;right:16px;bottom:16px;z-index:2147483646;';
@@ -30,6 +30,10 @@ WIDGET_JS = r"""
     '.vs .num{font-weight:600;min-width:34px}.vs .meta{color:#6b7280;font-size:12px;flex:1}.vs .note{display:block;color:#374151;font-size:12px}.vs .cur-badge{font-size:10px;background:#2563eb;color:#fff;border-radius:999px;padding:1px 6px}' +
     '.ft{padding:8px 14px 12px;display:flex;gap:8px;flex-wrap:wrap}.btn{display:inline-block;padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;text-decoration:none;font-size:12px;background:#fff}.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}' +
     '.jira{font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-right:6px;color:#2563eb;text-decoration:none}' +
+    '.notes{margin:10px 14px 0;border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:10px 12px}' +
+    '.notes h4{margin:0 0 4px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:5px}.notes .txt{white-space:pre-wrap;word-break:break-word;color:#1f2329;font-size:13px;max-height:34vh;overflow:auto}' +
+    '.notes .txt a{color:#2563eb}.notes + .notes{margin-top:8px}' +
+    '.pill .pin{background:#f59e0b;border-radius:999px;padding:2px 6px;font-size:11px}' +
     '.tabs{display:flex;border-bottom:1px solid #f1f3f5}.tabs button{flex:1;border:0;background:none;padding:8px;font:inherit;font-size:13px;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent}.tabs button.on{color:#2563eb;border-bottom-color:#2563eb;font-weight:600}' +
     '.sec{display:none}.sec.on{display:block}' +
     '.cl{list-style:none;margin:0;padding:6px 14px;max-height:34vh;overflow:auto}.cl li{padding:8px 0;border-bottom:1px solid #f1f3f5}.cl li:last-child{border-bottom:0}.cl .a{font-weight:600}.cl .t{color:#6b7280;font-size:11px;margin-left:6px}.cl .b{white-space:pre-wrap;margin-top:2px}.cl .r{font-size:10px;background:#dcfce7;color:#166534;border-radius:999px;padding:1px 6px;margin-left:6px}.cl .empty{color:#6b7280;padding:10px 0}' +
@@ -37,8 +41,21 @@ WIDGET_JS = r"""
     '.cf button{border:0;background:#2563eb;color:#fff;border-radius:6px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer}.cf button[disabled]{opacity:.6}.badge{background:#ef4444;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;margin-left:4px}';
   var isOld = D.current !== D.latest;
   var wrap = el('div', {class:'wrap'});
-  var pill = el('div', {class:'pill', title:T.info}, [ el('span', {class:'v' + (isOld ? ' old' : ''), text:'v' + D.current + (isOld ? ' ' + T.history : '')}), el('span', {class:'n', text: D.doc.compound ? (D.req.name + ' · ' + D.doc.name) : D.req.name}) ]);
+  var hasNotes = !!((D.req.notes || '') + (D.doc.notes || ''));
+  var pill = el('div', {class:'pill', title:T.info}, [ el('span', {class:'v' + (isOld ? ' old' : ''), text:'v' + D.current + (isOld ? ' ' + T.history : '')}), el('span', {class:'n', text: D.doc.compound ? (D.req.name + ' · ' + D.doc.name) : D.req.name}), hasNotes ? el('span', {class:'pin', title:T.notesTip, text:'\u270e ' + T.notes}) : null ]);
   var hd = el('div', {class:'hd'}, [ el('div', {}, [ el('h3', {}, [ el('span', {class:'tag tag-' + D.req.project, text:D.req.projectLabel}), document.createTextNode(D.req.name) ]), D.doc.compound ? el('div', {class:'doc', text:D.doc.name}) : null ]), el('button', {class:'x', type:'button', text:T.close}) ]);
+  function notesBox(label, text){
+    if (!text) return null;
+    var txt = el('div', {class:'txt'});
+    var re = /(https?:\/\/[^\s<>"']+)/g, last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) txt.appendChild(document.createTextNode(text.slice(last, m.index)));
+      txt.appendChild(el('a', {href:m[0], target:'_blank', rel:'noopener noreferrer', text:m[0]}));
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) txt.appendChild(document.createTextNode(text.slice(last)));
+    return el('div', {class:'notes'}, [ el('h4', {}, [document.createTextNode('\u270e ' + label)]), txt ]);
+  }
   var jira = el('span', {}, D.req.jira.map(function(j){ return el('a', {class:'jira', href:j.url, target:'_blank', rel:'noopener', text:j.key}); }));
   var dl = el('dl', {}, [
     el('dt', {text:T.owners}), el('dd', {text: D.req.owners.length ? D.req.owners.join('、') : T.none}),
@@ -51,7 +68,7 @@ WIDGET_JS = r"""
     return el('li', {class: cur ? 'cur' : ''}, [ el('a', {href: v.n === D.latest ? D.latestUrl : v.url}, [ el('span', {class:'num', text:'v' + v.n}), el('span', {class:'meta'}, [ document.createTextNode((v.time || '') + (v.by ? ' · ' + v.by : '')), v.note ? el('span', {class:'note', text:v.note}) : null ]), cur ? el('span', {class:'cur-badge', text:T.current}) : (v.n === D.latest ? el('span', {class:'cur-badge', text:T.latest}) : null) ]), v.file ? el('a', {class:'file', href:v.file, title:T.file, text:'\u2193'}) : null ]);
   }));
   var ft = el('div', {class:'ft'}, [ D.doc.dirUrl ? el('a', {class:'btn primary', href:D.doc.dirUrl, text:T.dir}) : null, isOld ? el('a', {class:'btn', href:D.latestUrl, text:T.latest}) : null, D.exportUrl ? el('a', {class:'btn', href:D.exportUrl, text:(D.exportLabel || T.download)}) : null ]);
-  var infoSec = el('div', {class:'sec on'}, [warn, dl, el('div', {style:'padding:6px 14px 0;color:#6b7280;font-size:12px', text:T.versions + ' (' + D.versions.length + ')'}), vs, ft]);
+  var infoSec = el('div', {class:'sec on'}, [warn, notesBox(T.notes, D.req.notes || ''), notesBox(T.docNotes, D.doc.notes || ''), dl, el('div', {style:'padding:6px 14px 0;color:#6b7280;font-size:12px', text:T.versions + ' (' + D.versions.length + ')'}), vs, ft]);
   // 留言
   var list = el('ul', {class:'cl'}, [el('li', {class:'empty', text:'…'})]);
   var nameIn = el('input', {type:'text', placeholder:T.yourName, maxlength:'40'});
@@ -99,6 +116,16 @@ WIDGET_JS = r"""
   var style = document.createElement('style'); style.textContent = css;
   root.appendChild(style); root.appendChild(wrap);
   pill.addEventListener('click', function(){ wrap.classList.add('open'); });
+  // 有备注时首次访问自动展开（同一份备注只自动展开一次）
+  if (hasNotes && D.notesKey) {
+    var seenKey = 'dcpm-notes-' + (D.latestUrl || '') + '-' + D.notesKey;
+    var seen = null;
+    try { seen = localStorage.getItem(seenKey); } catch (e) { seen = null; }
+    if (!seen) {
+      wrap.classList.add('open');
+      try { localStorage.setItem(seenKey, '1'); } catch (e) {}
+    }
+  }
   hd.querySelector('.x').addEventListener('click', function(){ wrap.classList.remove('open'); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') wrap.classList.remove('open'); });
   function mount(){ if (document.body) document.body.appendChild(host); }

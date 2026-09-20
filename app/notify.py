@@ -25,6 +25,7 @@ KINDS: dict[str, str] = {
     "fav_comment": "我收藏的需求收到留言",
     "item_update": "我负责或被汇报的重点事项有新进展 / 完成 / 变更",
     "item_remind": "重点事项超期未更新的定时提醒",
+    "item_nudge": "有人催办我负责的重点事项",
     "system": "系统消息（测试消息、绑定提醒等）",
 }
 
