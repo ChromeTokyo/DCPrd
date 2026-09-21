@@ -1,6 +1,8 @@
 # Cloudflare Pages 反向代理
 
-`dcprd.pages.dev` → `https://dcpm.ddns.net`。Pages 只放这个目录（Advanced Mode，`_worker.js` 接管全部请求）。
+`dcprd.pages.dev` → `https://dcpm.ddns.net` 的反向代理。Pages 只放这个目录（Advanced Mode，`_worker.js` 接管全部请求）。
+
+2026-09-21 起主域名切回 `dcpm.ddns.net`，pages.dev 成为历史域名：公开链接继续可用，后台页面由源站 301 回主域名（所以 Worker 不改写 Location）。
 
 部署：
 

@@ -6,9 +6,9 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/ChromeTokyo/DCPrd.git}"
 REPO_DIR="${REPO_DIR:-/opt/dcpm}"
-DOMAIN="${DOMAIN:-dcprd.pages.dev}"
+DOMAIN="${DOMAIN:-dcpm.ddns.net}"
 ORIGIN_DOMAIN="${ORIGIN_DOMAIN:-dcpm.ddns.net}"
-LEGACY_DOMAINS="${LEGACY_DOMAINS:-dcpm.ddns.net}"
+LEGACY_DOMAINS="${LEGACY_DOMAINS:-dcprd.pages.dev}"
 COMPOSE_VERSION="${COMPOSE_VERSION:-v2.35.1}"
 
 if [ "$(id -u)" -ne 0 ]; then

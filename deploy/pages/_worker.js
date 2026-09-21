@@ -36,9 +36,7 @@ export default {
     }
     const out = new Headers(resp.headers);
     for (const h of HOP_BY_HOP) out.delete(h);
-    // 源站若返回指向源站域名的绝对跳转，改写回当前域名
-    const loc = out.get("location");
-    if (loc && loc.startsWith(origin)) out.set("location", inUrl.origin + loc.slice(origin.length));
+    // Location 原样透传：源站发出的绝对跳转（例如旧域名后台 301 到主域名）必须保留目标域名
     return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: out });
   },
 };
