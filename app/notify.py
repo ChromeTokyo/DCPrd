@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -105,6 +106,59 @@ class Notifier:
             self._call("editMessageReplyMarkup", {"chat_id": int(tg_id), "message_id": int(message_id), "reply_markup": {"inline_keyboard": [[{"text": "✓ 已读", "callback_data": "noop"}]]}})
 
 
+# ---------- 免打扰时段 ----------
+
+DEFAULT_QUIET = {"quiet_enabled": "1", "quiet_start": "22", "quiet_end": "9"}
+
+
+def _tz(settings: dict):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    try:
+        return ZoneInfo(settings.get("timezone") or "Asia/Tokyo")
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("Asia/Tokyo")
+
+
+def _quiet_range(settings: dict) -> tuple[int, int] | None:
+    if (settings.get("quiet_enabled") or DEFAULT_QUIET["quiet_enabled"]) != "1":
+        return None
+    try:
+        start = int(settings.get("quiet_start") or DEFAULT_QUIET["quiet_start"]) % 24
+        end = int(settings.get("quiet_end") or DEFAULT_QUIET["quiet_end"]) % 24
+    except (TypeError, ValueError):
+        start, end = 22, 9
+    return None if start == end else (start, end)
+
+
+def in_quiet_hours(settings: dict, now_utc: dt.datetime | None = None) -> bool:
+    rng = _quiet_range(settings)
+    if not rng:
+        return False
+    start, end = rng
+    h = (now_utc or dt.datetime.now(dt.timezone.utc)).astimezone(_tz(settings)).hour
+    return (h >= start or h < end) if start > end else (start <= h < end)
+
+
+def quiet_until(settings: dict, now_utc: dt.datetime | None = None) -> str | None:
+    """静默时段内返回可推送时刻（UTC ISO），否则 None。"""
+    if not in_quiet_hours(settings, now_utc):
+        return None
+    rng = _quiet_range(settings)
+    assert rng
+    end = rng[1]
+    now = now_utc or dt.datetime.now(dt.timezone.utc)
+    local = now.astimezone(_tz(settings))
+    target = local.replace(hour=end, minute=0, second=0, microsecond=0)
+    if target <= local:
+        target += dt.timedelta(days=1)
+    return target.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def quiet_label(settings: dict) -> str:
+    rng = _quiet_range(settings)
+    return f"{rng[0]:02d}:00–{rng[1]:02d}:00" if rng else "未开启"
+
+
 # ---------- 偏好 / 关注状态 ----------
 
 def pref_enabled(conn: sqlite3.Connection, user_id: int, kind: str) -> bool:
@@ -157,32 +211,61 @@ def notify_user(conn: sqlite3.Connection, notifier: Notifier, base_url: str, use
     user = db.one(conn, "SELECT * FROM users WHERE id = ? AND deleted_at IS NULL", (user_id,))
     if not user:
         return None
-    nid = db.insert(conn, "notifications", {"user_id": user_id, "kind": kind, "title": title, "body": body, "url": url, "ref_type": ref_type, "ref_id": ref_id, "created_at": db.utcnow()})
-    if user["tg_id"] and bot_following(user) is not False:
-        text = title + (f"\n{body}" if body else "")
-        full_url = (base_url + url) if url.startswith("/") else url
-        buttons = [{"text": "已读", "callback_data": f"read:{nid}"}]
-        if full_url:
-            buttons.append({"text": "打开", "url": full_url})
-
-        def _send():
-            mid = notifier.send(user["tg_id"], text, buttons)
-            if mid:
-                try:
-                    c2 = db.connect(conn_path) if conn_path else None
-                except Exception:  # noqa: BLE001
-                    c2 = None
-                target = c2 or conn
-                target.execute("UPDATE notifications SET tg_message_id = ?, tg_sent_at = ? WHERE id = ?", (mid, db.utcnow(), nid))
-                if c2:
-                    c2.close()
-
-        conn_path = _db_path_of(conn)
-        if notifier.dry_run:
-            _send()
-        else:
-            threading.Thread(target=_send, daemon=True).start()
+    settings = db.get_settings(conn)
+    defer = quiet_until(settings)
+    nid = db.insert(conn, "notifications", {"user_id": user_id, "kind": kind, "title": title, "body": body, "url": url, "ref_type": ref_type, "ref_id": ref_id, "created_at": db.utcnow(), "deferred_until": defer})
+    if defer is None and user["tg_id"] and bot_following(user) is not False:
+        push_notification(conn, notifier, base_url, nid)
     return nid
+
+
+def push_notification(conn: sqlite3.Connection, notifier: Notifier, base_url: str, nid: int) -> None:
+    """把一条通知推送到 Telegram（异步；dry-run 下同步）。"""
+    n = db.one(conn, "SELECT * FROM notifications WHERE id = ?", (nid,))
+    if not n or n["tg_message_id"]:
+        return
+    user = db.one(conn, "SELECT * FROM users WHERE id = ? AND deleted_at IS NULL", (n["user_id"],))
+    if not user or not user["tg_id"] or bot_following(user) is False:
+        return
+    text = n["title"] + (f"\n{n['body']}" if n["body"] else "")
+    url = n["url"] or ""
+    full_url = (base_url + url) if url.startswith("/") else url
+    buttons = [{"text": "已读", "callback_data": f"read:{nid}"}]
+    if full_url:
+        buttons.append({"text": "打开", "url": full_url})
+    conn_path = _db_path_of(conn)
+
+    def _send():
+        mid = notifier.send(user["tg_id"], text, buttons)
+        if mid:
+            try:
+                c2 = db.connect(conn_path) if conn_path else None
+            except Exception:  # noqa: BLE001
+                c2 = None
+            target = c2 or conn
+            target.execute("UPDATE notifications SET tg_message_id = ?, tg_sent_at = ?, deferred_until = NULL WHERE id = ?", (mid, db.utcnow(), nid))
+            if c2:
+                c2.close()
+
+    if notifier.dry_run:
+        _send()
+    else:
+        threading.Thread(target=_send, daemon=True).start()
+
+
+def flush_deferred(conn: sqlite3.Connection, notifier: Notifier, base_url: str, now: str | None = None) -> int:
+    """推送已过静默时段的通知；期间已在站内读过的不再打扰。"""
+    now = now or db.utcnow()
+    rows = db.all_rows(conn, "SELECT id, read_at FROM notifications WHERE deferred_until IS NOT NULL AND deferred_until <= ? AND tg_message_id IS NULL ORDER BY id LIMIT 200", (now,))
+    n = 0
+    for r in rows:
+        if r["read_at"]:
+            conn.execute("UPDATE notifications SET deferred_until = NULL WHERE id = ?", (r["id"],))
+            continue
+        push_notification(conn, notifier, base_url, r["id"])
+        conn.execute("UPDATE notifications SET deferred_until = NULL WHERE id = ?", (r["id"],))
+        n += 1
+    return n
 
 
 def _db_path_of(conn: sqlite3.Connection) -> str | None:

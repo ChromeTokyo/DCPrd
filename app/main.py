@@ -116,6 +116,7 @@ def backup_database(cfg: Config) -> Path | None:
 
 
 async def _reminder_loop(app: FastAPI, cfg: Config) -> None:
+    from .notify import flush_deferred, in_quiet_hours
     from .routes.items import run_reminders
 
     await asyncio.sleep(20)
@@ -123,7 +124,9 @@ async def _reminder_loop(app: FastAPI, cfg: Config) -> None:
         try:
             conn = db.connect(cfg.db_path)
             try:
-                await asyncio.to_thread(run_reminders, cfg, conn, app.state.notifier, cfg.base_url)
+                await asyncio.to_thread(flush_deferred, conn, app.state.notifier, cfg.base_url)
+                if not in_quiet_hours(db.get_settings(conn)):  # 夜间不触发催更，白天补上
+                    await asyncio.to_thread(run_reminders, cfg, conn, app.state.notifier, cfg.base_url)
             finally:
                 conn.close()
         except Exception:  # noqa: BLE001
@@ -149,6 +152,9 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         "timezone": cfg.timezone,
         "sandbox_enabled": "1",
         "public_widget_enabled": "1",
+        "quiet_enabled": "1" if cfg.quiet_hours else "0",
+        "quiet_start": "22",
+        "quiet_end": "9",
     }
     db.init_db(cfg.db_path, defaults)
 

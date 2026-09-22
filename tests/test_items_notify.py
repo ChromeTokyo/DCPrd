@@ -268,3 +268,79 @@ def test_nudge(app, superuser, client_factory):
     r = superuser.post("/items/new", data={"csrf": csrf, "project": "im", "title": "无主事项", "frequency": "weekly", "reporters": [boss_id]}, follow_redirects=False)
     id2 = int(re.search(r"/items/(\d+)", r.headers["location"]).group(1))
     assert "已催办：Super" in boss.post(f"/items/{id2}/nudge", data={"csrf": csrf_of(boss)}, follow_redirects=True).text
+
+
+def test_quiet_hours(app, cfg, superuser, client_factory):
+    """夜间免打扰：站内照常，Telegram 延迟到早上；已读的不再补推；夜间不触发催更。"""
+    import datetime as dt
+
+    from app.notify import flush_deferred, in_quiet_hours, notify_user, quiet_until
+    from app.routes.items import run_reminders
+    csrf = csrf_of(superuser)
+    notifier = app.state.notifier
+    alice = invite(superuser, client_factory, "夜猫", 8501)
+    alice_id = uid_of(superuser, "夜猫")
+    conn = db.connect(cfg.db_path)
+    tokyo = dt.timezone(dt.timedelta(hours=9))
+
+    def at(h):  # 东京时间 h 点对应的 UTC 时刻
+        return dt.datetime(2026, 9, 23, h, 0, tzinfo=tokyo).astimezone(dt.timezone.utc)
+
+    for k, v in (("quiet_enabled", "1"), ("quiet_start", "22"), ("quiet_end", "9")):
+        db.set_setting(conn, k, v)
+    s = db.get_settings(conn)
+    assert s["quiet_enabled"] == "1" and s["quiet_start"] == "22" and s["quiet_end"] == "9"
+    assert in_quiet_hours(s, at(23)) and in_quiet_hours(s, at(3)) and not in_quiet_hours(s, at(10))
+    # 关闭开关后任何时间都不静默
+    assert not in_quiet_hours({**s, "quiet_enabled": "0"}, at(3))
+
+    # 夜里产生的通知：站内有，Telegram 不推，标记待推送
+    notifier.sent.clear()
+    import app.notify as N
+    real = N.quiet_until
+    N.quiet_until = lambda settings, now=None: real(settings, at(23))
+    try:
+        nid = notify_user(conn, notifier, "http://t", alice_id, "system", "夜里的通知", "内容", "/items")
+        nid2 = notify_user(conn, notifier, "http://t", alice_id, "system", "夜里第二条", "", "/items")
+    finally:
+        N.quiet_until = real
+    assert notifier.sent == []
+    row = db.one(conn, "SELECT deferred_until, tg_message_id FROM notifications WHERE id = ?", (nid,))
+    assert row["deferred_until"] and row["tg_message_id"] is None
+    page = alice.get("/notifications").text
+    assert "夜里的通知" in page and "夜间免打扰" in page and "后推送" in page  # 站内立刻可见
+
+    # 未到点不推；到点后推送
+    assert flush_deferred(conn, notifier, "http://t", "2026-09-22T20:00:00") == 0 and notifier.sent == []
+    alice.post(f"/notifications/{nid2}/read", data={"csrf": csrf_of(alice)}, follow_redirects=False)  # 第二条夜里已读
+    assert flush_deferred(conn, notifier, "http://t", row["deferred_until"]) == 1
+    assert [t for t, _ in notifier.sent] == [8501] and "夜里的通知" in notifier.sent[0][1]
+    assert db.one(conn, "SELECT deferred_until FROM notifications WHERE id = ?", (nid2,))["deferred_until"] is None  # 已读的清掉不补推
+    assert flush_deferred(conn, notifier, "http://t", row["deferred_until"]) == 0  # 不重复推
+
+    # 非静默时段产生的通知立即推送（把静默窗口挪到两小时后的一小时）
+    h = dt.datetime.now(tokyo).hour
+    db.set_setting(conn, "quiet_start", str((h + 2) % 24))
+    db.set_setting(conn, "quiet_end", str((h + 3) % 24))
+    assert not in_quiet_hours(db.get_settings(conn))
+    notifier.sent.clear()
+    notify_user(conn, notifier, "http://t", alice_id, "system", "白天的通知", "", "/items")
+    assert [t for t, _ in notifier.sent] == [8501]
+
+    # 夜间不触发定时催更：先造一个已超期的事项
+    r = superuser.post("/items/new", data={"csrf": csrf, "project": "eb", "title": "夜间不催", "frequency": "daily", "owners": [alice_id]}, follow_redirects=False)
+    item_id = int(re.search(r"/items/(\d+)", r.headers["location"]).group(1))
+    conn.execute("UPDATE key_items SET next_remind_at = '2000-01-01T00:00:00' WHERE id = ?", (item_id,))
+    notifier.sent.clear()
+    db.set_setting(conn, "quiet_start", "22"); db.set_setting(conn, "quiet_end", "9")
+    assert in_quiet_hours(db.get_settings(conn), at(2)) is True  # 主循环在这种时刻会跳过 run_reminders
+    assert run_reminders(cfg, conn, notifier, "http://t") == 1  # 白天调用则照常
+    conn.close()
+
+    # 设置页可改时段
+    r = superuser.post("/admin/settings", data={"csrf": csrf, "site_name": "X", "jira_base_url": "https://j", "timezone": "Asia/Tokyo", "max_upload_mb": "10",
+                                                "sandbox_enabled": "1", "public_widget_enabled": "1", "quiet_enabled": "1", "quiet_start": "23", "quiet_end": "8"}, follow_redirects=True)
+    assert "设置已保存" in r.text
+    c2 = db.connect(cfg.db_path)
+    assert db.get_settings(c2)["quiet_start"] == "23" and db.get_settings(c2)["quiet_end"] == "8"
+    c2.close()

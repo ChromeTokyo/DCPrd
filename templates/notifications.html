@@ -17,7 +17,7 @@
     <a class="n-main" href="/notifications/{{ n.id }}/go">
       <span class="n-title">{{ n.title }}</span>
       {% if n.body %}<span class="n-body">{{ n.body }}</span>{% endif %}
-      <span class="muted small">{{ fmt_dt(n.created_at, '%m-%d %H:%M') }} · {{ KINDS.get(n.kind, n.kind) }}{% if n.tg_sent_at %} · 已推送 Telegram{% endif %}{% if n.read_at %} · 已读 {{ fmt_dt(n.read_at, '%m-%d %H:%M') }}{% endif %}</span>
+      <span class="muted small">{{ fmt_dt(n.created_at, '%m-%d %H:%M') }} · {{ KINDS.get(n.kind, n.kind) }}{% if n.tg_sent_at %} · 已推送 Telegram{% elif n.deferred_until %} · 夜间免打扰，{{ fmt_dt(n.deferred_until, '%m-%d %H:%M') }} 后推送{% endif %}{% if n.read_at %} · 已读 {{ fmt_dt(n.read_at, '%m-%d %H:%M') }}{% endif %}</span>
     </a>
     {% if not n.read_at %}<form method="post" action="/notifications/{{ n.id }}/read" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ request.url.path }}{% if show_all %}?all=1{% endif %}"><button class="btn btn-sm">已读</button></form>{% endif %}
   </li>

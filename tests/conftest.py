@@ -25,6 +25,7 @@ def make_config(tmp_path, **overrides) -> Config:
         data_dir=tmp_path / "data",
         dev_mode=True,
         app_version="test",
+        quiet_hours=False,  # 测试默认不静默；夜间免打扰专项测试里单独开启
     )
     for k, v in overrides.items():
         setattr(cfg, k, v)

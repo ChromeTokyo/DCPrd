@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     ref_id        INTEGER,
     created_at    TEXT NOT NULL,
     read_at       TEXT,
+    deferred_until TEXT,                       -- 静默时段内产生：到点后再推送 Telegram
     tg_message_id INTEGER,
     tg_sent_at    TEXT
 );
@@ -295,6 +296,9 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
         # v7：users.note、key_items.interval_hours
         if "note" not in ucols:
             conn.execute("ALTER TABLE users ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+        ncols = {r["name"] for r in conn.execute("PRAGMA table_info(notifications)")}
+        if "deferred_until" not in ncols:
+            conn.execute("ALTER TABLE notifications ADD COLUMN deferred_until TEXT")
         kcols = {r["name"] for r in conn.execute("PRAGMA table_info(key_items)")}
         if "interval_hours" not in kcols:
             conn.execute("ALTER TABLE key_items ADD COLUMN interval_hours INTEGER NOT NULL DEFAULT 168")
@@ -330,7 +334,7 @@ def update(conn: sqlite3.Connection, table: str, row_id: int, data: dict[str, An
 
 # ---------- settings ----------
 
-SETTING_KEYS = ("site_name", "jira_base_url", "max_upload_mb", "timezone", "sandbox_enabled", "public_widget_enabled")
+SETTING_KEYS = ("site_name", "jira_base_url", "max_upload_mb", "timezone", "sandbox_enabled", "public_widget_enabled", "quiet_enabled", "quiet_start", "quiet_end")
 
 
 def get_settings(conn: sqlite3.Connection) -> dict[str, str]:

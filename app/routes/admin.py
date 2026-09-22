@@ -165,7 +165,13 @@ async def settings_save(request: Request, ctx: Ctx = Depends(get_ctx)):
         return ctx.redirect("/admin/settings")
     sandbox = "1" if form.get("sandbox_enabled") else "0"
     widget = "1" if form.get("public_widget_enabled") else "0"
-    new_values = {"site_name": site_name, "jira_base_url": jira, "timezone": tz, "max_upload_mb": str(mb), "sandbox_enabled": sandbox, "public_widget_enabled": widget}
+    try:
+        qs, qe = int(str(form.get("quiet_start") or 22)) % 24, int(str(form.get("quiet_end") or 9)) % 24
+    except ValueError:
+        ctx.flash("err", "免打扰时段需填 0～23 的整数")
+        return ctx.redirect("/admin/settings")
+    new_values = {"site_name": site_name, "jira_base_url": jira, "timezone": tz, "max_upload_mb": str(mb), "sandbox_enabled": sandbox, "public_widget_enabled": widget,
+                  "quiet_enabled": "1" if form.get("quiet_enabled") else "0", "quiet_start": str(qs), "quiet_end": str(qe)}
     changed = {k: {"from": ctx.settings.get(k), "to": v} for k, v in new_values.items() if ctx.settings.get(k) != v}
     for k, v in new_values.items():
         db.set_setting(ctx.conn, k, v)
