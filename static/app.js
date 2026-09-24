@@ -99,3 +99,23 @@
     });
   });
 })();
+
+// 负责人 / 汇报对象候选：只显示对所选项目有权限的成员
+(function () {
+  var pickers = document.querySelectorAll('.people-picker');
+  if (!pickers.length) return;
+  var radios = document.querySelectorAll('input[type=radio][name=project], input[type=radio][name=project_view]');
+  function current() { var r = document.querySelector('input[type=radio][name=project]:checked') || document.querySelector('input[type=radio][name=project_view]:checked'); return r ? r.value : ''; }
+  function apply() {
+    var proj = current();
+    pickers.forEach(function (p) {
+      p.querySelectorAll('label[data-projects]').forEach(function (l) {
+        var ok = !proj || (l.getAttribute('data-projects') || '').split(',').indexOf(proj) >= 0;
+        l.classList.toggle('hide', !ok);
+        if (!ok) { var cb = l.querySelector('input'); if (cb) cb.checked = false; }
+      });
+    });
+  }
+  radios.forEach(function (r) { r.addEventListener('change', apply); });
+  apply();
+})();

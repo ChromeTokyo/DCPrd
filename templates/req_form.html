@@ -8,9 +8,10 @@
   <div class="field">
     <label>项目 <span class="req">*</span></label>
     <div class="radios">
-    {% for key, label in PROJECTS.items() %}
-      <label class="radio"><input type="radio" name="project" value="{{ key }}" {% if (req and req.project == key) or (not req and loop.first) %}checked{% endif %} required> {{ label }}</label>
+    {% for key in editable_projects %}
+      <label class="radio"><input type="radio" name="project" value="{{ key }}" {% if (req and req.project == key) or (not req and loop.first) %}checked{% endif %} required> {{ PROJECTS[key] }}</label>
     {% endfor %}
+    {% if req and req.project not in editable_projects %}<label class="radio"><input type="radio" name="project" value="{{ req.project }}" checked required> {{ PROJECTS[req.project] }}</label>{% endif %}
     </div>
   </div>
   {% if mode == 'new' %}
@@ -32,11 +33,12 @@
   </div>
   <div class="field">
     <label>负责人（可多选）</label>
-    <div class="checks">
+    <div class="checks people-picker">
     {% for u in users %}
-      <label class="check"><input type="checkbox" name="owners" value="{{ u.id }}" {% if u.id in owners %}checked{% endif %}> {{ u.name }}</label>
+      <label class="check" data-projects="{{ user_projects.get(u.id, [])|join(',') }}"><input type="checkbox" name="owners" value="{{ u.id }}" {% if u.id in owners %}checked{% endif %}> {{ u.name }}</label>
     {% endfor %}
     </div>
+    <span class="hint">只列出对所选项目有权限的成员。</span>
   </div>
   <div class="field">
     <label>标签</label>

@@ -12,7 +12,7 @@ from starlette.datastructures import UploadFile
 
 from .. import db
 from ..main import get_ctx
-from ..queries import active_users
+from ..queries import active_users, user_projects_map, users_for_project
 from ..routes.public import SANDBOX_CSP
 from ..security import new_share_code
 from ..storage import copy_stream_limited
@@ -73,10 +73,11 @@ def _viewer_context(ctx: Ctx, page, version_id: int | None):
 @router.get("/")
 async def menu_view(ctx: Ctx = Depends(get_ctx), app: int | None = None, project: str = ""):
     ctx.require_user()
-    groups = q.systems_with_apps(ctx.conn)
+    groups = q.systems_with_apps(ctx.conn, visible=ctx.visible_projects)
     app_row = None
     if app:
         app_row = q.app_or_404(ctx.conn, app)
+        ctx.require_view(app_row["project"])
     elif groups:
         for g in groups:
             if g["apps"] and (not project or g["system"]["project"] == project):
@@ -91,16 +92,17 @@ async def menu_view(ctx: Ctx = Depends(get_ctx), app: int | None = None, project
 async def page_view(page_id: int, ctx: Ctx = Depends(get_ctx), v: int | None = None):
     ctx.require_user()
     page = q.page_or_404(ctx.conn, page_id)
+    ctx.require_view(page["project"])
     app_row = q.app_or_404(ctx.conn, page["app_id"])
     viewer = _viewer_context(ctx, page, v)
     my_reqs = db.all_rows(
         ctx.conn,
         "SELECT id, name, jira_keys FROM requirements WHERE kind = 'v2' AND deleted_at IS NULL AND v2_status != 'live' AND project = ? ORDER BY updated_at DESC LIMIT 50",
         (page["project"],),
-    )
+    ) if ctx.can_edit(page["project"]) else []
     return _render(
         ctx, "menu.html",
-        groups=q.systems_with_apps(ctx.conn), app=app_row, tree_items=q.menu_tree(ctx.conn, app_row["id"]), unlisted=q.unlisted_pages(ctx.conn, app_row["id"]),
+        groups=q.systems_with_apps(ctx.conn, visible=ctx.visible_projects), app=app_row, tree_items=q.menu_tree(ctx.conn, app_row["id"]), unlisted=q.unlisted_pages(ctx.conn, app_row["id"]),
         viewer=viewer, my_reqs=my_reqs, project=page["project"],
     )
 
@@ -112,6 +114,7 @@ async def page_start_change(page_id: int, request: Request, ctx: Ctx = Depends(g
     form = await request.form()
     ctx.check_csrf(form)
     page = q.page_or_404(ctx.conn, page_id)
+    ctx.require_edit(page["project"])
     base = form.get("base_version_id")
     base_id = int(base) if base and str(base).isdigit() else None
     req = str(form.get("req_id") or "")
@@ -143,17 +146,25 @@ def _serve_version(ctx: Ctx, ver, diff: bool) -> Response:
     return resp
 
 
+def _version_with_view(ctx: Ctx, version_id: int):
+    """按版本 id 取版本，并校验当前用户对其页面所属项目至少可见。"""
+    ver = q.version_or_404(ctx.conn, version_id)
+    page = q.page_or_404(ctx.conn, ver["page_id"])
+    ctx.require_view(page["project"])
+    return ver, page
+
+
 @router.get("/content/{version_id}")
 async def version_content(version_id: int, ctx: Ctx = Depends(get_ctx), diff: int = 0):
     ctx.require_user()
-    return _serve_version(ctx, q.version_or_404(ctx.conn, version_id), bool(diff))
+    ver, _ = _version_with_view(ctx, version_id)
+    return _serve_version(ctx, ver, bool(diff))
 
 
 @router.get("/download/{version_id}")
 async def version_download(version_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
-    ver = q.version_or_404(ctx.conn, version_id)
-    page = q.page_or_404(ctx.conn, ver["page_id"])
+    ver, page = _version_with_view(ctx, version_id)
     path = content_path(ctx.cfg, ver)
     if not path.is_file():
         raise HTTPException(404, "版本内容不存在")
@@ -180,7 +191,7 @@ async def version_delete(version_id: int, request: Request, ctx: Ctx = Depends(g
 @router.get("/annotations/{version_id}")
 async def annotations_list(version_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
-    q.version_or_404(ctx.conn, version_id)
+    _version_with_view(ctx, version_id)
     return JSONResponse([dict(a) for a in q.annotations_of(ctx.conn, version_id)])
 
 
@@ -189,7 +200,8 @@ async def annotations_create(version_id: int, request: Request, ctx: Ctx = Depen
     ctx.require_user()
     data = await request.json()
     ctx.check_csrf({"csrf": request.headers.get("x-csrf", "")})
-    q.version_or_404(ctx.conn, version_id)
+    _, page = _version_with_view(ctx, version_id)
+    ctx.require_edit(page["project"])
     try:
         x, y, w, h = (max(0.0, min(1.0, float(data[k]))) for k in ("x", "y", "w", "h"))
     except (KeyError, TypeError, ValueError):
@@ -204,6 +216,7 @@ async def annotations_create(version_id: int, request: Request, ctx: Ctx = Depen
 async def annotations_delete(version_id: int, ann_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     ctx.check_csrf({"csrf": request.headers.get("x-csrf", "")})
+    _version_with_view(ctx, version_id)
     ann = db.one(ctx.conn, "SELECT * FROM annotations WHERE id = ? AND version_id = ? AND deleted_at IS NULL", (ann_id, version_id))
     if not ann:
         raise HTTPException(404, "批注不存在")
@@ -225,7 +238,9 @@ async def req_list(ctx: Ctx = Depends(get_ctx), project: str = "", status: str =
     kw = (q or q_).strip()
     where = ["r.kind = 'v2'", "r.deleted_at IS NULL"]
     params: list = []
-    if project in PROJECTS:
+    vis = ctx.visible_projects
+    where.append(f"r.project IN ({','.join('?' * len(vis))})" if vis else "0"); params += vis
+    if project in vis:
         where.append("r.project = ?"); params.append(project)
     if status in STATUS_LABELS:
         where.append("r.v2_status = ?"); params.append(status)
@@ -251,8 +266,12 @@ async def req_list(ctx: Ctx = Depends(get_ctx), project: str = "", status: str =
 @router.get("/req/new")
 async def req_new_page(ctx: Ctx = Depends(get_ctx), project: str = "", page_id: int | None = None, base_version_id: int | None = None):
     ctx.require_user()
+    if not ctx.editable_projects:
+        raise HTTPException(403, "你没有任何项目的编辑权限，不能新建需求")
     page = q.page_or_404(ctx.conn, page_id) if page_id else None
-    return _render(ctx, "req_form.html", req=None, owners=[], users=active_users(ctx.conn), mode="new", project=project or (page["project"] if page else ""), page=page, base_version_id=base_version_id)
+    if page:
+        ctx.require_edit(page["project"])
+    return _render(ctx, "req_form.html", req=None, owners=[], users=active_users(ctx.conn), user_projects=user_projects_map(ctx.conn, ctx.visible_projects), mode="new", project=project or (page["project"] if page else ""), page=page, base_version_id=base_version_id)
 
 
 def _owner_ids(form) -> list[int]:
@@ -265,10 +284,13 @@ def _owner_ids(form) -> list[int]:
     return out
 
 
-def _set_owners(ctx: Ctx, req_id: int, ids: list[int]) -> None:
+def _set_owners(ctx: Ctx, req_id: int, ids: list[int], project: str) -> None:
+    """负责人只能是对该项目至少可见的成员。"""
+    allowed = {u["id"] for u in users_for_project(ctx.conn, project)}
     ctx.conn.execute("DELETE FROM requirement_owners WHERE requirement_id = ?", (req_id,))
     for uid in ids:
-        ctx.conn.execute("INSERT OR IGNORE INTO requirement_owners(requirement_id, user_id) VALUES (?, ?)", (req_id, uid))
+        if uid in allowed:
+            ctx.conn.execute("INSERT OR IGNORE INTO requirement_owners(requirement_id, user_id) VALUES (?, ?)", (req_id, uid))
 
 
 @router.post("/req/new")
@@ -281,13 +303,14 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
     if project not in PROJECTS or not name:
         ctx.flash("err", "请填写项目与名称")
         return ctx.redirect("/v2/req/new")
+    ctx.require_edit(project)
     now = db.utcnow()
     rid = db.insert(
         ctx.conn, "requirements",
         {"project": project, "kind": "v2", "name": name, "jira_keys": str(form.get("jira_keys") or "").strip(), "notes": str(form.get("notes") or "").strip(),
          "share_code": new_share_code(ctx.conn), "created_by": ctx.user["id"], "created_at": now, "updated_by": ctx.user["id"], "updated_at": now, "v2_status": "draft"},
     )
-    _set_owners(ctx, rid, _owner_ids(form))
+    _set_owners(ctx, rid, _owner_ids(form), project)
     page_id = form.get("page_id")
     if page_id and str(page_id).isdigit():
         base = form.get("base_version_id")
@@ -300,6 +323,7 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
 async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx), pq: str = ""):
     ctx.require_user()
     req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_view(req["project"])
     results = q.search_pages(ctx.conn, pq.strip(), req["project"]) if pq.strip() else []
     apps = db.all_rows(ctx.conn, "SELECT a.*, s.name AS system_name FROM apps a JOIN systems s ON s.id = a.system_id WHERE a.deleted_at IS NULL AND s.deleted_at IS NULL AND s.project = ? ORDER BY s.position, a.position", (req["project"],))
     owners = db.all_rows(ctx.conn, "SELECT u.* FROM requirement_owners ro JOIN users u ON u.id = ro.user_id WHERE ro.requirement_id = ? ORDER BY u.name", (req_id,))
@@ -313,8 +337,9 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx), pq: str = ""):
 async def req_edit_page(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     owners = [r["user_id"] for r in db.all_rows(ctx.conn, "SELECT user_id FROM requirement_owners WHERE requirement_id = ?", (req_id,))]
-    return _render(ctx, "req_form.html", req=req, owners=owners, users=active_users(ctx.conn), mode="edit", project=req["project"])
+    return _render(ctx, "req_form.html", req=req, owners=owners, users=active_users(ctx.conn), user_projects=user_projects_map(ctx.conn, ctx.visible_projects), mode="edit", project=req["project"])
 
 
 @router.post("/req/{req_id}/edit")
@@ -323,12 +348,13 @@ async def req_edit(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     form = await request.form()
     ctx.check_csrf(form)
     req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     name = str(form.get("name") or "").strip()
     if not name:
         ctx.flash("err", "名称不能为空")
         return ctx.redirect(f"/v2/req/{req_id}/edit")
     db.update(ctx.conn, "requirements", req_id, {"name": name, "jira_keys": str(form.get("jira_keys") or "").strip(), "notes": str(form.get("notes") or "").strip(), "updated_at": db.utcnow(), "updated_by": ctx.user["id"]})
-    _set_owners(ctx, req_id, _owner_ids(form))
+    _set_owners(ctx, req_id, _owner_ids(form), req["project"])
     ctx.flash("ok", "已保存")
     return ctx.redirect(f"/v2/req/{req_id}")
 
@@ -338,7 +364,7 @@ async def req_status(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(q.requirement_v2_or_404(ctx.conn, req_id)["project"])
     status = str(form.get("status") or "")
     if status not in STATUS_LABELS:
         raise HTTPException(400, "状态不合法")
@@ -354,7 +380,7 @@ async def req_apps_save(req_id: int, request: Request, ctx: Ctx = Depends(get_ct
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(q.requirement_v2_or_404(ctx.conn, req_id)["project"])
     for key, value in form.multi_items():
         if key.startswith("release_") and key[8:].isdigit():
             ctx.conn.execute(
@@ -372,6 +398,7 @@ async def req_delete(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     form = await request.form()
     ctx.check_csrf(form)
     req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     if not _can_delete_req(ctx, req):
         raise HTTPException(403, "只能删除自己创建的需求")
     db.update(ctx.conn, "requirements", req_id, {"deleted_at": db.utcnow(), "deleted_by": ctx.user["id"]})
@@ -386,6 +413,7 @@ async def req_reset_share(req_id: int, request: Request, ctx: Ctx = Depends(get_
     form = await request.form()
     ctx.check_csrf(form)
     req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     code = new_share_code(ctx.conn)
     db.update(ctx.conn, "requirements", req_id, {"share_code": code})
     db.audit(ctx.conn, ctx.user, "reset_share", "requirement", req_id, {"old": req["share_code"], "new": code})
@@ -394,7 +422,12 @@ async def req_reset_share(req_id: int, request: Request, ctx: Ctx = Depends(get_
 
 
 def _add_page(ctx: Ctx, req_id: int, page_id: int, base_version_id: int | None = None) -> None:
+    req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     page = q.page_or_404(ctx.conn, page_id)
+    ctx.require_view(page["project"])  # 看不见的页面先 403，不暴露其存在
+    if page["project"] != req["project"]:
+        raise HTTPException(400, "页面与需求不属于同一个项目")
     if base_version_id is None:
         base = latest_baseline(ctx.conn, page_id)
         base_version_id = base["id"] if base else None
@@ -412,7 +445,6 @@ async def req_page_add(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    q.requirement_v2_or_404(ctx.conn, req_id)
     page_id = int(str(form.get("page_id") or 0))
     base = form.get("base_version_id")
     _add_page(ctx, req_id, page_id, int(base) if base and str(base).isdigit() else None)
@@ -425,9 +457,12 @@ async def req_page_new(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    q.requirement_v2_or_404(ctx.conn, req_id)
+    req = q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     app_id = int(str(form.get("app_id") or 0))
     app_row = q.app_or_404(ctx.conn, app_id)
+    if app_row["project"] != req["project"]:
+        raise HTTPException(400, "端与需求不属于同一个项目")
     title = str(form.get("title") or "").strip()
     route = str(form.get("route_key") or "").strip()
     if not title or not route:
@@ -451,7 +486,7 @@ async def req_page_remove(req_id: int, page_id: int, request: Request, ctx: Ctx 
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(q.requirement_v2_or_404(ctx.conn, req_id)["project"])
     now = db.utcnow()
     ctx.conn.execute("UPDATE requirement_pages SET deleted_at = ? WHERE requirement_id = ? AND page_id = ?", (now, req_id, page_id))
     ctx.conn.execute("UPDATE page_versions SET deleted_at = ?, deleted_by = ? WHERE requirement_id = ? AND page_id = ? AND deleted_at IS NULL", (now, ctx.user["id"], req_id, page_id))
@@ -469,7 +504,7 @@ async def req_page_upload(req_id: int, page_id: int, request: Request, ctx: Ctx 
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    q.requirement_v2_or_404(ctx.conn, req_id)
+    ctx.require_edit(q.requirement_v2_or_404(ctx.conn, req_id)["project"])
     page = q.page_or_404(ctx.conn, page_id)
     rp = db.one(ctx.conn, "SELECT * FROM requirement_pages WHERE requirement_id = ? AND page_id = ? AND deleted_at IS NULL", (req_id, page_id))
     if not rp:
@@ -506,7 +541,7 @@ async def req_page_upload(req_id: int, page_id: int, request: Request, ctx: Ctx 
 @router.get("/admin")
 async def admin_home(ctx: Ctx = Depends(get_ctx)):
     ctx.require_admin()
-    return _render(ctx, "admin.html", groups=q.systems_with_apps(ctx.conn))
+    return _render(ctx, "admin.html", groups=q.systems_with_apps(ctx.conn, visible=ctx.visible_projects))
 
 
 @router.post("/admin/systems/new")

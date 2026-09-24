@@ -28,21 +28,29 @@ def _parse_owner_ids(form) -> list[int]:
     return ids
 
 
-def _set_owners(ctx: Ctx, req_id: int, owner_ids: list[int]) -> None:
+def _set_owners(ctx: Ctx, req_id: int, owner_ids: list[int], project: str) -> None:
+    """负责人只能是对该项目至少可见的成员（管理员除外），其他的静默丢弃。"""
+    allowed = {u["id"] for u in queries.users_for_project(ctx.conn, project)}
     ctx.conn.execute("DELETE FROM requirement_owners WHERE requirement_id = ?", (req_id,))
     for uid in owner_ids:
-        if db.one(ctx.conn, "SELECT 1 FROM users WHERE id = ? AND deleted_at IS NULL", (uid,)):
+        if uid in allowed:
             ctx.conn.execute("INSERT OR IGNORE INTO requirement_owners(requirement_id, user_id) VALUES (?, ?)", (req_id, uid))
 
 
 @router.get("/")
 async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", page: int = 1, tag: int | None = None, fav: int = 0):
     ctx.require_user()
-    project = project if project in PROJECTS else ""
+    visible = ctx.visible_projects
+    project = project if project in visible else ""
     q = (q or "").strip()
     page = max(1, page)
     where = ["r.deleted_at IS NULL", "r.kind != 'v2'"]
     params: list = []
+    if not visible:
+        where.append("0")
+    else:
+        where.append(f"r.project IN ({','.join('?' * len(visible))})")
+        params += visible
     if fav:
         where.append("EXISTS (SELECT 1 FROM favorites f WHERE f.requirement_id = r.id AND f.user_id = ?)")
         params.append(ctx.user["id"])
@@ -100,10 +108,16 @@ async def index(ctx: Ctx = Depends(get_ctx), project: str = "", q: str = "", pag
     )
 
 
+def _require_any_edit(ctx: Ctx) -> None:
+    ctx.require_user()
+    if not ctx.editable_projects:
+        raise HTTPException(403, "你没有任何项目的编辑权限，不能新建需求，请联系管理员开通")
+
+
 @router.get("/req/new")
 async def req_new_page(ctx: Ctx = Depends(get_ctx)):
-    ctx.require_user()
-    return ctx.render("req_form.html", req=None, owners=[], users=queries.active_users(ctx.conn), mode="new", all_tags=queries.active_tags(ctx.conn), tag_ids=[])
+    _require_any_edit(ctx)
+    return ctx.render("req_form.html", req=None, owners=[], users=queries.active_users(ctx.conn), user_projects=queries.user_projects_map(ctx.conn, ctx.visible_projects), mode="new", all_tags=queries.active_tags(ctx.conn), tag_ids=[])
 
 
 @router.post("/req/new")
@@ -117,6 +131,7 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
     if project not in PROJECTS or kind not in ("single", "compound") or not name:
         ctx.flash("err", "请填写项目、类型与名称")
         return ctx.redirect("/req/new")
+    ctx.require_edit(project)
     now = db.utcnow()
     req_id = db.insert(
         ctx.conn,
@@ -134,7 +149,7 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
             "updated_at": now,
         },
     )
-    _set_owners(ctx, req_id, _parse_owner_ids(form))
+    _set_owners(ctx, req_id, _parse_owner_ids(form), project)
     queries.set_tags(ctx.conn, req_id, queries.parse_ids(form, "tags"))
     if kind == "single":
         doc_id = db.insert(
@@ -165,6 +180,7 @@ async def req_new(request: Request, ctx: Ctx = Depends(get_ctx)):
 async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_view(req["project"])
     if req["kind"] == "v2":
         return ctx.redirect(f"/v2/req/{req_id}")
     record_view(ctx, req_id)
@@ -173,7 +189,8 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
         "owners": queries.owners_of(ctx.conn, req_id),
         "creator": queries.user_name(ctx.conn, req["created_by"]),
         "updater": queries.user_name(ctx.conn, req["updated_by"]),
-        "can_delete": can_delete(ctx, req),
+        "can_delete": can_delete(ctx, req) and ctx.can_edit(req["project"]),
+        "editable": ctx.can_edit(req["project"]),
         "tags": queries.tags_of(ctx.conn, req_id),
         "all_tags": queries.active_tags(ctx.conn),
         "fav": is_fav(ctx, req_id),
@@ -194,7 +211,8 @@ async def req_detail(req_id: int, ctx: Ctx = Depends(get_ctx)):
 async def req_edit_page(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = queries.requirement_or_404(ctx.conn, req_id)
-    return ctx.render("req_form.html", req=req, owners=[o["id"] for o in queries.owners_of(ctx.conn, req_id)], users=queries.active_users(ctx.conn), mode="edit", all_tags=queries.active_tags(ctx.conn), tag_ids=[t["id"] for t in queries.tags_of(ctx.conn, req_id)])
+    ctx.require_edit(req["project"])
+    return ctx.render("req_form.html", req=req, owners=[o["id"] for o in queries.owners_of(ctx.conn, req_id)], users=queries.active_users(ctx.conn), user_projects=queries.user_projects_map(ctx.conn, ctx.visible_projects), mode="edit", all_tags=queries.active_tags(ctx.conn), tag_ids=[t["id"] for t in queries.tags_of(ctx.conn, req_id)])
 
 
 @router.post("/req/{req_id}/edit")
@@ -203,17 +221,20 @@ async def req_edit(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     form = await request.form()
     ctx.check_csrf(form)
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     project = str(form.get("project") or req["project"])
     name = str(form.get("name") or "").strip()
     if project not in PROJECTS or not name:
         ctx.flash("err", "请填写项目与名称")
         return ctx.redirect(f"/req/{req_id}/edit")
+    if project != req["project"]:
+        ctx.require_edit(project)  # 挪到别的项目需要目标项目的编辑权
     db.update(
         ctx.conn, "requirements", req_id,
         {"project": project, "name": name, "jira_keys": str(form.get("jira_keys") or "").strip(), "notes": str(form.get("notes") or "").strip(),
          "updated_at": db.utcnow(), "updated_by": ctx.user["id"]},
     )
-    _set_owners(ctx, req_id, _parse_owner_ids(form))
+    _set_owners(ctx, req_id, _parse_owner_ids(form), project)
     queries.set_tags(ctx.conn, req_id, queries.parse_ids(form, "tags"))
     if req["kind"] == "single":
         doc = queries.primary_document(ctx.conn, req_id)
@@ -229,7 +250,8 @@ async def req_tags(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    queries.requirement_or_404(ctx.conn, req_id)
+    req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     queries.set_tags(ctx.conn, req_id, queries.parse_ids(form, "tags"))
     db.update(ctx.conn, "requirements", req_id, {"updated_at": db.utcnow(), "updated_by": ctx.user["id"]})
     ctx.flash("ok", "标签已更新")
@@ -242,6 +264,7 @@ async def req_delete(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     form = await request.form()
     ctx.check_csrf(form)
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     if not can_delete(ctx, req):
         raise HTTPException(403, "只能删除自己创建的需求")
     db.update(ctx.conn, "requirements", req_id, {"deleted_at": db.utcnow(), "deleted_by": ctx.user["id"]})
@@ -256,6 +279,7 @@ async def req_convert(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)
     form = await request.form()
     ctx.check_csrf(form)
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     if req["kind"] != "single":
         ctx.flash("err", "该需求已经是复合需求")
         return ctx.redirect(f"/req/{req_id}")
@@ -276,6 +300,7 @@ async def req_reset_share(req_id: int, request: Request, ctx: Ctx = Depends(get_
     form = await request.form()
     ctx.check_csrf(form)
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     if req["kind"] == "single":
         doc = queries.primary_document(ctx.conn, req_id)
         if doc:
@@ -296,6 +321,7 @@ async def req_doc_new(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx)
     form = await request.form()
     ctx.check_csrf(form)
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_edit(req["project"])
     if req["kind"] != "compound":
         raise HTTPException(400, "只有复合需求可以新增子文档")
     name = str(form.get("name") or "").strip()

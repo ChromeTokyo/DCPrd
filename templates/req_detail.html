@@ -5,13 +5,15 @@
 <div class="page-head">
   <h1>{{ fav_btn(req.id, fav, csrf, '/req/' ~ req.id, 'btn-link fav-big') }} {{ project_tag(req.project) }} {{ req.name }} {{ kind_tag(req.kind) }}</h1>
   <div class="actions">
-    <a class="btn" href="/req/{{ req.id }}/edit">编辑</a>
+    {% if editable %}<a class="btn" href="/req/{{ req.id }}/edit">编辑</a>{% endif %}
     <a class="btn" href="/req/{{ req.id }}/export" title="打包需求信息与全部版本的原始文件">导出 zip</a>
+    {% if editable %}
     {% if req.kind == 'single' %}
     <form method="post" action="/req/{{ req.id }}/convert" class="inline" data-confirm="转为复合需求后，原文档成为第一个子文档，历史全部保留，且不可转回单体。确定吗？"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn">转为复合需求</button></form>
     {% endif %}
     <form method="post" action="/req/{{ req.id }}/reset-share" class="inline" data-confirm="重置后旧的分享链接将立即失效（404）。确定重置吗？"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn">重置分享链接</button></form>
     {% if can_delete %}{{ confirm_form('/req/' ~ req.id ~ '/delete', csrf, '删除需求', '确定删除需求「' ~ req.name ~ '」？其所有文档的分享链接将失效。', 'btn btn-danger') }}{% endif %}
+    {% else %}<span class="st" title="你对该项目只有查看权限">👁 只读</span>{% endif %}
   </div>
 </div>
 <section class="card info">
@@ -19,14 +21,14 @@
     <dt>Jira</dt><dd>{% if req.jira_keys %}{{ jira_links(req.jira_keys, jira_base_url) }}{% else %}<span class="muted">—</span>{% endif %}</dd>
     <dt>标签</dt><dd>
       <div class="chips inline-chips">{% for t in tags %}{{ tag_chip(t, '/?tag=' ~ t.id) }}{% else %}<span class="muted">—</span>{% endfor %}</div>
-      <details class="tag-edit"><summary class="small">修改标签</summary>
+      {% if editable %}<details class="tag-edit"><summary class="small">修改标签</summary>
         <form method="post" action="/req/{{ req.id }}/tags" class="form">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           {% set tag_ids = tags|map(attribute='id')|list %}
           {{ tag_picker(all_tags, tag_ids) }}
           <button type="submit" class="btn btn-sm" style="margin-top:6px">保存标签</button>
         </form>
-      </details>
+      </details>{% endif %}
     </dd>
     <dt>负责人</dt><dd>{% if owners %}{% for o in owners %}{{ o.name }}{% if not loop.last %}、{% endif %}{% endfor %}{% else %}<span class="muted">—</span>{% endif %}</dd>
     <dt>备注</dt><dd class="notes">{% if req.notes %}{{ req.notes|linkify }}{% else %}<span class="muted">—</span>{% endif %}</dd>
@@ -39,8 +41,8 @@
   {% if doc %}
   {{ share_box(base_url ~ '/s/' ~ doc.share_code ~ '/') }}
   {% if latest %}<p class="muted">当前公开的是 v{{ latest.number }}（{{ latest.uploader_name }} · {{ fmt_dt(latest.uploaded_at) }}）</p>{% else %}<p class="muted">尚无已发布版本，分享链接暂时返回 404。</p>{% endif %}
-  {{ version_table(versions, doc, base_url, csrf, is_admin, fmt_dt) }}
-  {{ upload_form('/doc/' ~ doc.id ~ '/upload', csrf) }}
+  {{ version_table(versions, doc, base_url, csrf, is_admin, fmt_dt, editable) }}
+  {% if editable %}{{ upload_form('/doc/' ~ doc.id ~ '/upload', csrf) }}{% endif %}
   {% endif %}
 {% else %}
   {{ share_box(base_url ~ '/s/' ~ req.share_code ~ '/', '分享链接（目录入口页，列出全部子文档）') }}
@@ -64,6 +66,7 @@
     </div>
     {% else %}<p class="muted">还没有子文档。</p>{% endif %}
   </section>
+  {% if editable %}
   <section class="card">
     <h3>新增子文档</h3>
     <form method="post" action="/req/{{ req.id }}/docs/new" enctype="multipart/form-data" class="form">
@@ -76,6 +79,7 @@
       <button type="submit" class="btn btn-primary">新增子文档</button>
     </form>
   </section>
+  {% endif %}
 {% endif %}
-{{ comments_section(comments, csrf, '/req/' ~ req.id, fmt_dt, is_admin or req.created_by == user.id, show_doc=(req.kind == 'compound')) }}
+{{ comments_section(comments, csrf, '/req/' ~ req.id, fmt_dt, (is_admin or req.created_by == user.id) and editable, show_doc=(req.kind == 'compound'), editable=editable) }}
 {% endblock %}

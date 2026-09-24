@@ -20,6 +20,7 @@ router = APIRouter()
 async def entry_page(ver_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     ver, doc, req = queries.version_or_404(ctx.conn, ver_id)
+    ctx.require_edit(req["project"])
     candidates = json.loads(ver["html_candidates"] or "[]")
     return ctx.render("ver_entry.html", ver=ver, doc=doc, req=req, candidates=candidates, back=back_url(doc, req))
 
@@ -30,6 +31,7 @@ async def entry_set(ver_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     form = await request.form()
     ctx.check_csrf(form)
     ver, doc, req = queries.version_or_404(ctx.conn, ver_id)
+    ctx.require_edit(req["project"])
     candidates = json.loads(ver["html_candidates"] or "[]")
     choice = str(form.get("entry") or "")
     if choice not in candidates:
@@ -53,6 +55,7 @@ async def republish(ver_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     form = await request.form()
     ctx.check_csrf(form)
     ver, doc, req = queries.version_or_404(ctx.conn, ver_id)
+    ctx.require_edit(req["project"])
     if not ver["entry_path"]:
         ctx.flash("err", "该版本尚未选择入口文件，不能重新发布")
         return ctx.redirect(back_url(doc, req))
@@ -72,6 +75,7 @@ async def delete_version(ver_id: int, request: Request, ctx: Ctx = Depends(get_c
     if not ctx.is_admin:
         raise HTTPException(403, "只有管理员可以删除历史版本")
     ver, doc, req = queries.version_or_404(ctx.conn, ver_id)
+    ctx.require_edit(req["project"])
     db.update(ctx.conn, "versions", ver_id, {"deleted_at": db.utcnow(), "deleted_by": ctx.user["id"]})
     db.audit(ctx.conn, ctx.user, "delete_version", "version", ver_id, {"document_id": doc["id"], "number": ver["number"], "file": ver["original_filename"]})
     ctx.flash("ok", f"v{ver['number']} 已删除")
@@ -82,6 +86,7 @@ async def delete_version(ver_id: int, request: Request, ctx: Ctx = Depends(get_c
 async def download_original(ver_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     ver, doc, req = queries.version_or_404(ctx.conn, ver_id)
+    ctx.require_view(req["project"])
     path = version_dir(ctx.cfg, doc["id"], ver["number"]) / "original" / ver["original_filename"]
     if not path.is_file():
         raise HTTPException(404, "原文件不存在")

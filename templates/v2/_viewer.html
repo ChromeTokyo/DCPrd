@@ -101,7 +101,7 @@
         <ul class="others">{% for o in others %}<li><a href="{% if public %}/p2/{{ req.share_code }}/{{ o.id }}/{% else %}/v2/p/{{ o.id }}{% endif %}">{{ o.app_name }} · {{ o.title }}</a></li>{% endfor %}</ul>
       </section>
       {% endif %}
-      {% if not public %}
+      {% if not public and can_edit(page.project) %}
       <section class="side-sec">
         <h4>基于此页发起改动</h4>
         <form method="post" action="/v2/p/{{ page.id }}/start" class="form">

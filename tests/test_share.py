@@ -175,8 +175,9 @@ def test_tags_admin_defines_users_attach(superuser, client_factory):
     code = re.search(r"/invite/([A-Za-z0-9_\-]+)", superuser.get("/admin/users").text).group(1)
     li = client_factory()
     li.get(f"/invite/{code}")
-    from tests.conftest import login
+    from tests.conftest import grant, login, user_id_by_name
     assert login(li, 7007, "Li").status_code == 302
+    grant(superuser, user_id_by_name(superuser, "小李"))
     lcsrf = csrf_of(li)
     assert li.get("/admin/tags").status_code == 403
     assert li.post("/admin/tags/new", data={"csrf": lcsrf, "name": "x"}, follow_redirects=False).status_code == 403

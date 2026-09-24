@@ -22,7 +22,7 @@
 <form method="post" action="/req/{{ req_id }}/fav" class="inline fav-form"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ back }}"><button type="submit" class="{{ cls }} fav {% if fav %}on{% endif %}" title="{% if fav %}取消收藏{% else %}收藏{% endif %}">{% if fav %}★{% else %}☆{% endif %}</button></form>
 {%- endmacro %}
 
-{% macro comments_section(comments, csrf, back, fmt_dt, can_delete_any, show_doc=False) -%}
+{% macro comments_section(comments, csrf, back, fmt_dt, can_delete_any, show_doc=False, editable=True) -%}
 <section class="card" id="comments">
   <h3>留言 <span class="muted">({{ comments|length }}{% set open = comments|rejectattr('resolved_at')|list %}{% if open %} · {{ open|length }} 条待处理{% endif %})</span></h3>
   {% if comments %}
@@ -32,7 +32,7 @@
       <div class="c-head"><strong>{{ c.author }}</strong> <span class="muted small">{{ fmt_dt(c.created_at) }}{% if show_doc %} · {{ c.doc_name }}{% endif %}{% if c.version_number %} · v{{ c.version_number }}{% endif %}{% if c.resolved_at %} · 已处理（{{ c.resolver or '' }}）{% endif %}</span></div>
       <div class="c-body">{{ c.body|linkify }}</div>
       <div class="c-actions">
-        <form method="post" action="/comments/{{ c.id }}/resolve" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ back }}"><button class="btn btn-sm">{% if c.resolved_at %}重新打开{% else %}标记已处理{% endif %}</button></form>
+        {% if editable %}<form method="post" action="/comments/{{ c.id }}/resolve" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ back }}"><button class="btn btn-sm">{% if c.resolved_at %}重新打开{% else %}标记已处理{% endif %}</button></form>{% endif %}
         {% if can_delete_any %}{{ confirm_form('/comments/' ~ c.id ~ '/delete', csrf, '删除', '确定删除这条留言？') }}{% endif %}
       </div>
     </li>
@@ -89,7 +89,7 @@
 </section>
 {%- endmacro %}
 
-{% macro version_table(versions, doc, base_url, csrf, is_admin, fmt_dt) -%}
+{% macro version_table(versions, doc, base_url, csrf, is_admin, fmt_dt, editable=True) -%}
 <section class="card">
   <h3>版本历史 <span class="muted">({{ versions|length }})</span></h3>
   {% if versions %}
@@ -109,12 +109,12 @@
         {% if v.entry_path %}
         <a class="btn btn-sm" href="/v/{{ doc.share_code }}/{{ v.number }}/" target="_blank" rel="noopener">查看</a>
         {{ copy_btn(base_url ~ '/v/' ~ doc.share_code ~ '/' ~ v.number ~ '/') }}
-        <form method="post" action="/ver/{{ v.id }}/republish" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn btn-sm">重新发布</button></form>
+        {% if editable %}<form method="post" action="/ver/{{ v.id }}/republish" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="btn btn-sm">重新发布</button></form>{% endif %}
         {% else %}
-        <a class="btn btn-sm btn-primary" href="/ver/{{ v.id }}/entry">选择入口</a>
+        {% if editable %}<a class="btn btn-sm btn-primary" href="/ver/{{ v.id }}/entry">选择入口</a>{% else %}<span class="muted small">待选择入口</span>{% endif %}
         {% endif %}
         <a class="btn btn-sm" href="/ver/{{ v.id }}/download">下载原文件</a>
-        {% if is_admin %}{{ confirm_form('/ver/' ~ v.id ~ '/delete', csrf, '删除', '确定删除 v' ~ v.number ~ '？该版本的分享链接将立即失效（数据保留在库中，可由技术人员恢复）。') }}{% endif %}
+        {% if is_admin and editable %}{{ confirm_form('/ver/' ~ v.id ~ '/delete', csrf, '删除', '确定删除 v' ~ v.number ~ '？该版本的分享链接将立即失效（数据保留在库中，可由技术人员恢复）。') }}{% endif %}
       </td>
     </tr>
     {% endfor %}

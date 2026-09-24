@@ -1,11 +1,11 @@
 {% extends "v2/layout.html" %}
 {% block title %}需求单 · {{ site_name }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>需求单</h1><a class="btn btn-primary" href="/v2/req/new">新建需求</a></div>
+<div class="page-head"><h1>需求单</h1>{% if editable_projects %}<a class="btn btn-primary" href="/v2/req/new">新建需求</a>{% endif %}</div>
 <div class="toolbar">
   <nav class="tabs">
     <a href="/v2/req?status={{ status }}&q={{ q|urlquote }}" class="{% if not project %}active{% endif %}">全部</a>
-    {% for key, label in PROJECTS.items() %}<a href="/v2/req?project={{ key }}&status={{ status }}&q={{ q|urlquote }}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ label }}</a>{% endfor %}
+    {% for key in visible_projects %}<a href="/v2/req?project={{ key }}&status={{ status }}&q={{ q|urlquote }}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ PROJECTS[key] }}</a>{% endfor %}
   </nav>
   <nav class="tabs">
     <a href="/v2/req?project={{ project }}&q={{ q|urlquote }}" class="{% if not status %}active{% endif %}">所有状态</a>

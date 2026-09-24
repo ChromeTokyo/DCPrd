@@ -2,11 +2,12 @@
 {% from "_macros.html" import project_tag %}
 {% block title %}重点事项 · {{ site_name }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>重点事项</h1><a class="btn btn-primary" href="/items/new{% if project %}?project={{ project }}{% endif %}">新增重点事项</a></div>
+<div class="page-head"><h1>重点事项</h1>{% if editable_projects %}<a class="btn btn-primary" href="/items/new{% if project %}?project={{ project }}{% endif %}">新增重点事项</a>{% endif %}</div>
+{% if not visible_projects %}<div class="empty">你还没有任何项目的访问权限，请联系管理员开通。</div>{% else %}
 <div class="toolbar">
   <nav class="tabs">
     <a href="/items?status={{ status }}&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if not project %}active{% endif %}">全部</a>
-    {% for key, label in PROJECTS.items() %}<a href="/items?project={{ key }}&status={{ status }}&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ label }}</a>{% endfor %}
+    {% for key in visible_projects %}<a href="/items?project={{ key }}&status={{ status }}&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if project == key %}active{% endif %} tab-{{ key }}">{{ PROJECTS[key] }}</a>{% endfor %}
   </nav>
   <nav class="tabs">
     <a href="/items?project={{ project }}&status=open&q={{ q|urlquote }}{% if mine %}&mine=1{% endif %}" class="{% if status == 'open' %}active{% endif %}">进行中</a>
@@ -34,4 +35,5 @@
   </tbody>
 </table></div>
 {% else %}<div class="empty">没有重点事项。</div>{% endif %}
+{% endif %}
 {% endblock %}

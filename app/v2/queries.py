@@ -9,9 +9,16 @@ from fastapi import HTTPException
 from .. import db
 
 
-def systems_with_apps(conn: sqlite3.Connection, project: str | None = None) -> list[dict]:
+def systems_with_apps(conn: sqlite3.Connection, project: str | None = None, visible: list[str] | None = None) -> list[dict]:
     where = "s.deleted_at IS NULL" + (" AND s.project = ?" if project else "")
-    systems = db.all_rows(conn, f"SELECT s.* FROM systems s WHERE {where} ORDER BY s.project, s.position, s.id", (project,) if project else ())
+    params: list = [project] if project else []
+    if visible is not None:
+        if not visible:
+            where += " AND 0"
+        else:
+            where += f" AND s.project IN ({','.join('?' * len(visible))})"
+            params += visible
+    systems = db.all_rows(conn, f"SELECT s.* FROM systems s WHERE {where} ORDER BY s.project, s.position, s.id", params)
     out = []
     for s in systems:
         apps = db.all_rows(

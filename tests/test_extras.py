@@ -13,6 +13,8 @@ def invite(superuser, factory, name, tg_id):
     c = factory()
     c.get(f"/invite/{code}")
     assert login(c, tg_id, name).status_code == 302
+    from tests.conftest import grant, user_id_by_name
+    grant(superuser, user_id_by_name(superuser, name))
     return c
 
 

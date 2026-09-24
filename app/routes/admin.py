@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .. import db, queries
 from ..main import get_ctx
 from ..security import new_invite_code
-from ..web import Ctx
+from ..web import PERM_LEVELS, PROJECTS, Ctx
 
 router = APIRouter(prefix="/admin")
 
@@ -27,7 +27,35 @@ async def users_page(ctx: Ctx = Depends(get_ctx)):
         ctx.conn,
         "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY CASE role WHEN 'super' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, name",
     )
-    return ctx.render("admin_users.html", users=users)
+    perms = {u["id"]: queries.user_levels(ctx.conn, u) for u in users}
+    return ctx.render("admin_users.html", users=users, perms=perms)
+
+
+@router.post("/users/{user_id}/perms")
+async def users_perms(user_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
+    """设置普通用户在各项目的权限（无 / 可见 / 可编辑）。管理员与超管不受矩阵限制。"""
+    ctx.require_admin()
+    form = await request.form()
+    ctx.check_csrf(form)
+    u = _user_or_404(ctx, user_id)
+    if u["role"] != "user":
+        ctx.flash("err", "管理员拥有全部项目权限，无需设置")
+        return ctx.redirect("/admin/users")
+    before = queries.user_levels(ctx.conn, u)
+    levels = {}
+    for proj in PROJECTS:
+        lv = str(form.get(f"perm_{proj}") or "none")
+        levels[proj] = lv if lv in PERM_LEVELS else "none"
+    queries.set_user_levels(ctx.conn, user_id, levels)
+    after = queries.user_levels(ctx.conn, u)
+    removed = 0
+    for proj in [p for p in before if p not in after]:  # 撤掉某项目的权限 → 从该项目的需求负责人 / 事项人员里移出
+        removed += ctx.conn.execute("DELETE FROM requirement_owners WHERE user_id = ? AND requirement_id IN (SELECT id FROM requirements WHERE project = ?)", (user_id, proj)).rowcount
+        removed += ctx.conn.execute("DELETE FROM key_item_people WHERE user_id = ? AND item_id IN (SELECT id FROM key_items WHERE project = ?)", (user_id, proj)).rowcount
+    if before != after:
+        db.audit(ctx.conn, ctx.user, "set_permissions", "user", user_id, {"name": u["name"], "from": before, "to": after, "removed_assignments": removed})
+    ctx.flash("ok", f"「{u['name']}」的项目权限已保存")
+    return ctx.redirect("/admin/users")
 
 
 @router.post("/users/new")
@@ -97,7 +125,8 @@ async def users_unbind(user_id: int, request: Request, ctx: Ctx = Depends(get_ct
          "invite_code": new_invite_code(), "invite_created_at": db.utcnow()},
     )
     ctx.conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-    db.audit(ctx.conn, ctx.user, "unbind_user", "user", user_id, {"name": u["name"], "tg_id": u["tg_id"]})
+    ctx.conn.execute("DELETE FROM project_permissions WHERE user_id = ?", (user_id,))  # 新邀请链接绑定的人从无权限开始
+    db.audit(ctx.conn, ctx.user, "unbind_user", "user", user_id, {"name": u["name"], "tg_id": u["tg_id"], "permissions_cleared": True})
     ctx.flash("ok", f"已解绑「{u['name']}」的 Telegram，并生成了新的邀请链接")
     if user_id == ctx.user["id"]:
         return ctx.redirect("/login")
@@ -117,6 +146,8 @@ async def users_delete(user_id: int, request: Request, ctx: Ctx = Depends(get_ct
     db.update(ctx.conn, "users", user_id, {"deleted_at": db.utcnow(), "deleted_by": ctx.user["id"], "tg_id": None, "invite_code": None})
     ctx.conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     ctx.conn.execute("DELETE FROM requirement_owners WHERE user_id = ?", (user_id,))
+    ctx.conn.execute("DELETE FROM project_permissions WHERE user_id = ?", (user_id,))
+    ctx.conn.execute("DELETE FROM key_item_people WHERE user_id = ?", (user_id,))
     db.audit(ctx.conn, ctx.user, "delete_user", "user", user_id, {"name": u["name"], "tg_id": u["tg_id"]})
     ctx.flash("ok", f"用户「{u['name']}」已删除")
     return ctx.redirect("/admin/users")

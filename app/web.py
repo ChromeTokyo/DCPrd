@@ -28,7 +28,8 @@ INVITE_COOKIE = "dcpm_invite"
 # 会话永不过期：只有手动退出、被解绑/删除用户才失效。Cookie 按浏览器上限（400 天）设置并在每次访问时滑动续期。
 COOKIE_MAX_AGE = 400 * 86400
 SESSION_FOREVER = "9999-12-31T00:00:00"
-PROJECTS = {"eb": "EB", "im": "IM", "tk": "TK"}
+PROJECTS = {"eb": "EB", "im": "IM", "site": "站点", "tk": "TK"}
+PERM_LEVELS = {"none": "无权限", "view": "可见", "edit": "可编辑"}
 
 _URL_RE = re.compile(r"(https?://[^\s<>\"']+)")
 _JIRA_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*-\d+")
@@ -224,6 +225,38 @@ class Ctx:
             raise LoginRedirect(path)
         return self.user
 
+    # --- 项目权限 ---
+    @property
+    def levels(self) -> dict[str, str]:
+        if not hasattr(self, "_levels"):
+            from .queries import user_levels
+            self._levels = user_levels(self.conn, self.user)
+        return self._levels
+
+    @property
+    def visible_projects(self) -> list[str]:
+        return [p for p in PROJECTS if p in self.levels]
+
+    @property
+    def editable_projects(self) -> list[str]:
+        return [p for p in PROJECTS if self.levels.get(p) == "edit"]
+
+    def can_view(self, project: str) -> bool:
+        return project in self.levels
+
+    def can_edit(self, project: str) -> bool:
+        return self.levels.get(project) == "edit"
+
+    def require_view(self, project: str) -> None:
+        self.require_user()
+        if not self.can_view(project):
+            raise HTTPException(status_code=403, detail=f"你没有「{PROJECTS.get(project, project)}」项目的访问权限，请联系管理员开通")
+
+    def require_edit(self, project: str) -> None:
+        self.require_user()
+        if not self.can_edit(project):
+            raise HTTPException(status_code=403, detail=f"你对「{PROJECTS.get(project, project)}」项目只有查看权限，不能进行此操作")
+
     def require_admin(self) -> sqlite3.Row:
         self.require_user()
         if not self.is_admin:
@@ -280,6 +313,11 @@ class Ctx:
             request=self.request,
             fmt_dt=self.fmt_dt,
             unread=self.unread,
+            visible_projects=self.visible_projects if self.user else [],
+            editable_projects=self.editable_projects if self.user else [],
+            can_edit=self.can_edit,
+            can_view=self.can_view,
+            PERM_LEVELS=PERM_LEVELS,
         )
         body = env.get_template(template).render(**context)
         resp = HTMLResponse(body, status_code=status_code)

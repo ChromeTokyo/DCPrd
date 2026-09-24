@@ -252,6 +252,8 @@ def test_new_page_and_menu_import_and_permissions(superuser, client_factory):
     wang = client_factory()
     wang.get(f"/invite/{code}")
     assert login(wang, 5005, "Wang").status_code == 302
+    from tests.conftest import grant, user_id_by_name
+    grant(superuser, user_id_by_name(superuser, "小王"))
     wcsrf = csrf_of(wang, "/v2/")
     assert wang.get("/v2/admin").status_code == 403
     assert wang.post(f"/v2/admin/apps/{app_id}/snapshots/import", data={"csrf": wcsrf}, files={"file": snap_zip("9", {"/x": "<p>"})}, follow_redirects=False).status_code == 403

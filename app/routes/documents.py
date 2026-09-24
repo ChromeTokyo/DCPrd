@@ -60,6 +60,7 @@ def can_delete(ctx: Ctx, row) -> bool:
 async def doc_detail(doc_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     doc, req = queries.document_or_404(ctx.conn, doc_id)
+    ctx.require_view(req["project"])
     if req["kind"] == "single":
         return ctx.redirect(f"/req/{req['id']}")
     from .extras import record_view
@@ -79,7 +80,8 @@ async def doc_detail(doc_id: int, ctx: Ctx = Depends(get_ctx)):
         comments=comments,
         versions=queries.versions_of(ctx.conn, doc["id"]),
         latest=queries.latest_version(ctx.conn, doc["id"]),
-        can_delete=can_delete(ctx, doc),
+        can_delete=can_delete(ctx, doc) and ctx.can_edit(req["project"]),
+        editable=ctx.can_edit(req["project"]),
         creator=queries.user_name(ctx.conn, doc["created_by"]),
     )
 
@@ -90,6 +92,7 @@ async def doc_edit(doc_id: int, request: Request, ctx: Ctx = Depends(get_ctx)):
     form = await request.form()
     ctx.check_csrf(form)
     doc, req = queries.document_or_404(ctx.conn, doc_id)
+    ctx.require_edit(req["project"])
     name = (form.get("name") or "").strip()
     if not name:
         ctx.flash("err", "名称不能为空")
@@ -106,6 +109,7 @@ async def doc_delete(doc_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     form = await request.form()
     ctx.check_csrf(form)
     doc, req = queries.document_or_404(ctx.conn, doc_id)
+    ctx.require_edit(req["project"])
     if req["kind"] == "single":
         raise HTTPException(400, "单体需求请直接删除需求")
     if not can_delete(ctx, doc):
@@ -123,6 +127,7 @@ async def doc_reset_share(doc_id: int, request: Request, ctx: Ctx = Depends(get_
     form = await request.form()
     ctx.check_csrf(form)
     doc, req = queries.document_or_404(ctx.conn, doc_id)
+    ctx.require_edit(req["project"])
     code = new_share_code(ctx.conn)
     db.update(ctx.conn, "documents", doc["id"], {"share_code": code, "updated_at": db.utcnow()})
     db.audit(ctx.conn, ctx.user, "reset_share", "document", doc["id"], {"old": doc["share_code"], "new": code})
@@ -136,6 +141,7 @@ async def doc_upload(doc_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     form = await request.form()
     ctx.check_csrf(form)
     doc, req = queries.document_or_404(ctx.conn, doc_id)
+    ctx.require_edit(req["project"])
     upload = form.get("file")
     if not isinstance(upload, UploadFile) or not upload.filename:
         ctx.flash("err", "请选择要上传的文件")

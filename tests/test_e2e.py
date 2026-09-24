@@ -80,9 +80,20 @@ def test_full_flow(browser, live_url):
     assert "张三" in user.content()
     assert "用户管理" not in user.locator(".nav").inner_text()
 
-    # super 能看到"设为管理员"，普通用户看不到用户管理页
+    # 新成员默认无权限：首页提示；管理员在矩阵里开通 EB 可编辑
+    user.goto(f"{base_url}/")
+    assert "还没有任何项目的访问权限" in user.content()
     admin.goto(f"{base_url}/admin/users")
     assert admin.locator("text=设为管理员").count() == 1
+    row = admin.locator("tr", has_text="张三")
+    row.locator("select[name=perm_eb]").select_option("edit")
+    row.locator("select[name=perm_im]").select_option("view")
+    row.locator("button:has-text('保存权限')").click()
+    admin.wait_for_url(f"{base_url}/admin/users")
+    assert "项目权限已保存" in admin.locator("#flash").inner_text()
+    user.goto(f"{base_url}/")
+    assert "还没有任何项目的访问权限" not in user.content()
+    assert user.locator(".tabs a", has_text="EB").count() == 1 and user.locator(".tabs a", has_text="TK").count() == 0
 
     # 4. 单体需求 + 上传 html v1
     admin.goto(f"{base_url}/req/new")

@@ -12,6 +12,8 @@ def invite_user(admin, name: str, factory, tg_id: int):
     c.get(f"/invite/{codes[-1]}")
     assert login(c, tg_id, name).status_code == 302
     uid = int(re.search(rf'{name}</span>.*?/admin/users/(\d+)/', admin.get("/admin/users").text, re.S).group(1))
+    from tests.conftest import grant
+    grant(admin, uid)
     return c, uid
 
 

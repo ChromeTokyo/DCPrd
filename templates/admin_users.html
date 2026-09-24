@@ -15,9 +15,10 @@
   <div class="page-head" style="margin-bottom:8px"><h3>成员</h3>
     <form method="post" action="/admin/users/bot-check" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-sm">检测 Bot 关注状态</button></form></div>
   <p class="muted small">「Bot 通知」= 成员是否在 Telegram 里对 @{{ cfg.tg_bot_username }} 点过 Start。成员发消息给 Bot 时会自动记录；也可点上方按钮批量检测。</p>
+  <p class="muted small">「项目权限」只对普通用户生效：无权限 = 后台完全看不到该项目；可见 = 能看需求、版本、留言，能下载、收藏、给重点事项写进展；可编辑 = 还能新建需求、上传版本、编辑信息、新增子文档、删自己创建的。新邀请的成员默认无权限。分享出去的公开链接不受权限限制。</p>
   <div class="table-wrap">
   <table class="table users">
-    <thead><tr><th>名称</th><th>角色</th><th>Telegram</th><th>Bot 通知</th><th>邀请链接</th><th class="actions">操作</th></tr></thead>
+    <thead><tr><th>名称</th><th>角色</th><th>项目权限</th><th>Telegram</th><th>Bot 通知</th><th>邀请链接</th><th class="actions">操作</th></tr></thead>
     <tbody>
     {% for u in users %}
     <tr>
@@ -31,6 +32,19 @@
           </form>
         </details></td>
       <td>{% if u.role == 'super' %}<span class="tag tag-super">超级管理员</span>{% elif u.role == 'admin' %}<span class="tag tag-admin">管理员</span>{% else %}用户{% endif %}</td>
+      <td class="perm-cell">
+        {% if u.role != 'user' %}<span class="muted small">全部项目可编辑</span>
+        {% else %}
+        <form method="post" action="/admin/users/{{ u.id }}/perms" class="perm-form">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          {% for key, label in PROJECTS.items() %}{% set lv = perms[u.id].get(key, 'none') %}
+          <label class="perm-row"><span class="tag tag-{{ key }}">{{ label }}</span>
+            <select name="perm_{{ key }}" class="perm-{{ lv }}">{% for v, vl in PERM_LEVELS.items() %}<option value="{{ v }}" {% if v == lv %}selected{% endif %}>{{ vl }}</option>{% endfor %}</select></label>
+          {% endfor %}
+          <button class="btn btn-sm">保存权限</button>
+        </form>
+        {% endif %}
+      </td>
       <td>{% if u.tg_id %}{% if u.tg_username %}@{{ u.tg_username }}{% else %}{{ u.tg_first_name }} {{ u.tg_last_name or '' }}{% endif %} <span class="muted small">(id {{ u.tg_id }}，绑定于 {{ fmt_dt(u.bound_at) }})</span>{% else %}<span class="muted">未绑定</span>{% endif %}</td>
       <td>{% if not u.tg_id %}<span class="muted">—</span>{% elif u.bot_blocked_at and (not u.bot_started_at or u.bot_blocked_at >= u.bot_started_at) %}<span class="st st-off" title="{{ fmt_dt(u.bot_blocked_at) }}">✗ 未关注</span>{% elif u.bot_started_at %}<span class="st st-live" title="{{ fmt_dt(u.bot_started_at) }}">✓ 已关注</span>{% else %}<span class="st" title="尚未检测">? 未知</span>{% endif %}</td>
       <td>{% if u.invite_code %}<span class="invite">{{ base_url }}/invite/{{ u.invite_code }}</span> {{ copy_btn(base_url ~ '/invite/' ~ u.invite_code, '复制邀请链接') }}{% else %}<span class="muted">—</span>{% endif %}</td>

@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -232,6 +232,13 @@ CREATE TABLE IF NOT EXISTS key_item_files (
     deleted_at  TEXT
 );
 
+CREATE TABLE IF NOT EXISTS project_permissions (
+    user_id INTEGER NOT NULL,
+    project TEXT NOT NULL,
+    level   TEXT NOT NULL,                    -- view | edit（没有记录 = 无权限）
+    PRIMARY KEY (user_id, project)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     at          TEXT NOT NULL,
@@ -275,6 +282,7 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
     try:
         conn.executescript(SCHEMA)
         row = conn.execute("SELECT version FROM schema_version").fetchone()
+        old_version = int(row["version"]) if row else SCHEMA_VERSION  # 新库不需要数据迁移
         if row is None:
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
         # v2：2.0 数据表 + requirements 新列（幂等）
@@ -303,6 +311,15 @@ def init_db(db_path: Path, defaults: dict[str, str]) -> None:
         if "interval_hours" not in kcols:
             conn.execute("ALTER TABLE key_items ADD COLUMN interval_hours INTEGER NOT NULL DEFAULT 168")
             conn.execute("UPDATE key_items SET interval_hours = CASE frequency WHEN 'daily' THEN 24 WHEN 'biweekly' THEN 336 WHEN 'monthly' THEN 720 ELSE 168 END")
+        # v9（一次性数据迁移，按旧版本号判断，不能重复执行）：
+        #   原 IM 项目更名为「站点」(key: im -> site)，IM 重新成为一个空项目；
+        #   现有已绑定的普通用户默认四个项目全部「可编辑」，新邀请的人默认无权限。
+        if old_version < 9:
+            for table in ("requirements", "key_items", "systems"):
+                conn.execute(f"UPDATE {table} SET project = 'site' WHERE project = 'im'")
+            for u in conn.execute("SELECT id FROM users WHERE role = 'user' AND deleted_at IS NULL AND tg_id IS NOT NULL").fetchall():
+                for proj in ("eb", "im", "site", "tk"):
+                    conn.execute("INSERT OR IGNORE INTO project_permissions(user_id, project, level) VALUES (?, ?, 'edit')", (u["id"], proj))
         conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         for k, v in defaults.items():
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))

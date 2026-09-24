@@ -151,3 +151,51 @@ def parse_ids(form, key: str) -> list[int]:
         except (TypeError, ValueError):
             pass
     return out
+
+
+# ---------- 项目权限 ----------
+
+def user_levels(conn: sqlite3.Connection, user) -> dict[str, str]:
+    """用户在各项目的权限：管理员/超管全部 edit；普通用户按 project_permissions（无记录 = 无权限，不出现在字典里）。"""
+    from .web import PROJECTS
+    if not user:
+        return {}
+    if user["role"] in ("admin", "super"):
+        return {p: "edit" for p in PROJECTS}
+    return {r["project"]: r["level"] for r in db.all_rows(conn, "SELECT project, level FROM project_permissions WHERE user_id = ? AND level IN ('view', 'edit')", (user["id"],)) if r["project"] in PROJECTS}
+
+
+def set_user_levels(conn: sqlite3.Connection, user_id: int, levels: dict[str, str]) -> None:
+    from .web import PROJECTS
+    for proj in PROJECTS:
+        lv = levels.get(proj, "none")
+        if lv in ("view", "edit"):
+            conn.execute("INSERT INTO project_permissions(user_id, project, level) VALUES (?, ?, ?) ON CONFLICT(user_id, project) DO UPDATE SET level = excluded.level", (user_id, proj, lv))
+        else:
+            conn.execute("DELETE FROM project_permissions WHERE user_id = ? AND project = ?", (user_id, proj))
+
+
+def users_for_project(conn: sqlite3.Connection, project: str) -> list[sqlite3.Row]:
+    """可作为该项目需求 / 事项负责人的成员：管理员、超管，以及对该项目至少可见的普通用户。"""
+    return db.all_rows(
+        conn,
+        """SELECT u.* FROM users u WHERE u.deleted_at IS NULL AND (
+               u.role IN ('admin', 'super') OR EXISTS (SELECT 1 FROM project_permissions p WHERE p.user_id = u.id AND p.project = ? AND p.level IN ('view', 'edit')))
+           ORDER BY u.name""",
+        (project,),
+    )
+
+
+def user_projects_map(conn: sqlite3.Connection, restrict_to: list[str] | None = None) -> dict[int, list[str]]:
+    """每个成员可见的项目列表（表单里按项目过滤负责人候选用）。restrict_to：只保留这些项目，避免把完整权限矿阵暴露给普通用户。"""
+    from .web import PROJECTS
+    out: dict[int, list[str]] = {}
+    for u in db.all_rows(conn, "SELECT id, role FROM users WHERE deleted_at IS NULL"):
+        out[u["id"]] = list(PROJECTS) if u["role"] in ("admin", "super") else []
+    for r in db.all_rows(conn, "SELECT user_id, project FROM project_permissions WHERE level IN ('view', 'edit')"):
+        if r["user_id"] in out and r["project"] in PROJECTS and r["project"] not in out[r["user_id"]]:
+            out[r["user_id"]].append(r["project"])
+    if restrict_to is not None:
+        keep = set(restrict_to)
+        out = {uid: [p for p in ps if p in keep] for uid, ps in out.items()}
+    return out

@@ -47,21 +47,30 @@ def fav_ids(ctx: Ctx) -> set[int]:
     return {r["requirement_id"] for r in db.all_rows(ctx.conn, "SELECT requirement_id FROM favorites WHERE user_id = ?", (ctx.user["id"],))}
 
 
+def _visible_sql(ctx: Ctx) -> tuple[str, list]:
+    vis = ctx.visible_projects
+    if not vis:
+        return " AND 0", []
+    return f" AND r.project IN ({','.join('?' * len(vis))})", list(vis)
+
+
 def favorites_list(ctx: Ctx) -> list:
+    extra, params = _visible_sql(ctx)
     return db.all_rows(
         ctx.conn,
-        """SELECT r.id, r.name, r.project, r.kind FROM favorites f JOIN requirements r ON r.id = f.requirement_id
-           WHERE f.user_id = ? AND r.deleted_at IS NULL ORDER BY f.created_at DESC""",
-        (ctx.user["id"],),
+        f"""SELECT r.id, r.name, r.project, r.kind FROM favorites f JOIN requirements r ON r.id = f.requirement_id
+           WHERE f.user_id = ? AND r.deleted_at IS NULL{extra} ORDER BY f.created_at DESC""",
+        (ctx.user["id"], *params),
     )
 
 
 def recent_list(ctx: Ctx, limit: int = 8) -> list:
+    extra, params = _visible_sql(ctx)
     return db.all_rows(
         ctx.conn,
-        """SELECT r.id, r.name, r.project, r.kind, v.viewed_at FROM recent_views v JOIN requirements r ON r.id = v.requirement_id
-           WHERE v.user_id = ? AND r.deleted_at IS NULL ORDER BY v.viewed_at DESC LIMIT ?""",
-        (ctx.user["id"], limit),
+        f"""SELECT r.id, r.name, r.project, r.kind, v.viewed_at FROM recent_views v JOIN requirements r ON r.id = v.requirement_id
+           WHERE v.user_id = ? AND r.deleted_at IS NULL{extra} ORDER BY v.viewed_at DESC LIMIT ?""",
+        (ctx.user["id"], *params, limit),
     )
 
 
@@ -70,7 +79,8 @@ async def toggle_fav(req_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    queries.requirement_or_404(ctx.conn, req_id)
+    req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_view(req["project"])
     if is_fav(ctx, req_id):
         ctx.conn.execute("DELETE FROM favorites WHERE user_id = ? AND requirement_id = ?", (ctx.user["id"], req_id))
         ctx.flash("ok", "已取消收藏")
@@ -154,6 +164,7 @@ async def export_response(ctx: Ctx, req, only_doc=None, public: bool = False) ->
 async def export_requirement(req_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     req = queries.requirement_or_404(ctx.conn, req_id)
+    ctx.require_view(req["project"])
     return await export_response(ctx, req)
 
 
@@ -282,9 +293,10 @@ async def comment_resolve(comment_id: int, request: Request, ctx: Ctx = Depends(
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    c = db.one(ctx.conn, "SELECT c.*, d.requirement_id FROM comments c JOIN documents d ON d.id = c.document_id WHERE c.id = ? AND c.deleted_at IS NULL", (comment_id,))
+    c = db.one(ctx.conn, "SELECT c.*, d.requirement_id, r.project FROM comments c JOIN documents d ON d.id = c.document_id JOIN requirements r ON r.id = d.requirement_id WHERE c.id = ? AND c.deleted_at IS NULL", (comment_id,))
     if not c:
         raise HTTPException(404, "留言不存在")
+    ctx.require_edit(c["project"])
     if c["resolved_at"]:
         db.update(ctx.conn, "comments", comment_id, {"resolved_at": None, "resolved_by": None})
         ctx.flash("ok", "已重新打开")
@@ -299,9 +311,10 @@ async def comment_delete(comment_id: int, request: Request, ctx: Ctx = Depends(g
     ctx.require_user()
     form = await request.form()
     ctx.check_csrf(form)
-    c = db.one(ctx.conn, "SELECT c.*, d.requirement_id, r.created_by AS req_creator FROM comments c JOIN documents d ON d.id = c.document_id JOIN requirements r ON r.id = d.requirement_id WHERE c.id = ? AND c.deleted_at IS NULL", (comment_id,))
+    c = db.one(ctx.conn, "SELECT c.*, d.requirement_id, r.created_by AS req_creator, r.project FROM comments c JOIN documents d ON d.id = c.document_id JOIN requirements r ON r.id = d.requirement_id WHERE c.id = ? AND c.deleted_at IS NULL", (comment_id,))
     if not c:
         raise HTTPException(404, "留言不存在")
+    ctx.require_edit(c["project"])
     if not (ctx.is_admin or c["req_creator"] == ctx.user["id"]):
         raise HTTPException(403, "只有管理员或需求创建人可以删除留言")
     db.update(ctx.conn, "comments", comment_id, {"deleted_at": db.utcnow(), "deleted_by": ctx.user["id"]})

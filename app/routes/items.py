@@ -95,17 +95,12 @@ def people_ids(conn: sqlite3.Connection, item_id: int) -> list[int]:
     return [r["user_id"] for r in db.all_rows(conn, "SELECT DISTINCT user_id FROM key_item_people WHERE item_id = ?", (item_id,))]
 
 
-def _set_people(conn, item_id: int, role: str, ids: list[int]) -> None:
-    conn.execute("DELETE FROM key_item_people WHERE item_id = ? AND role = ?", (item_id, role))
-    for uid in dict.fromkeys(ids):
-        if db.one(conn, "SELECT 1 FROM users WHERE id = ? AND deleted_at IS NULL", (uid,)):
-            conn.execute("INSERT OR IGNORE INTO key_item_people(item_id, user_id, role) VALUES (?, ?, ?)", (item_id, uid, role))
-
-
-def _set_requirements(conn, item_id: int, req_ids: list[int]) -> None:
+def _set_requirements(conn, item_id: int, req_ids: list[int], visible: list[str] | None = None) -> None:
+    """关联需求只能是当前用户可见项目下的需求（visible=None 表示不限制，管理员）。"""
     conn.execute("DELETE FROM key_item_requirements WHERE item_id = ?", (item_id,))
     for rid in dict.fromkeys(req_ids):
-        if db.one(conn, "SELECT 1 FROM requirements WHERE id = ? AND deleted_at IS NULL", (rid,)):
+        row = db.one(conn, "SELECT project FROM requirements WHERE id = ? AND deleted_at IS NULL", (rid,))
+        if row and (visible is None or row["project"] in visible):
             conn.execute("INSERT OR IGNORE INTO key_item_requirements(item_id, requirement_id) VALUES (?, ?)", (item_id, rid))
 
 
@@ -130,7 +125,7 @@ async def _save_files(ctx: Ctx, item_id: int, update_id: int | None, uploads) ->
 
 
 def _notify_item(ctx: Ctx, item, title: str, body: str, kind: str = "item_update", update_id: int | None = None) -> None:
-    notify_users(ctx.conn, ctx.notifier, ctx.base_url, people_ids(ctx.conn, item["id"]), kind, title, body, f"/items/{item['id']}", "item_update" if update_id else "key_item", update_id or item["id"], exclude=ctx.user["id"])
+    notify_users(ctx.conn, ctx.notifier, ctx.base_url, people_ids(ctx.conn, item["id"]), kind, title, body, f"/items/{item['id']}", "item_update" if update_id else "key_item", update_id or item["id"], exclude=ctx.user["id"], project=item["project"])
 
 
 def _due_state(item, now: str) -> str:
@@ -146,9 +141,15 @@ def _due_state(item, now: str) -> str:
 @router.get("")
 async def items_list(ctx: Ctx = Depends(get_ctx), project: str = "", status: str = "open", q: str = "", mine: int = 0):
     ctx.require_user()
+    visible = ctx.visible_projects
     where = ["i.deleted_at IS NULL"]
     params: list = []
-    if project in PROJECTS:
+    if not visible:
+        where.append("0")
+    else:
+        where.append(f"i.project IN ({','.join('?' * len(visible))})"); params += visible
+    project = project if project in visible else ""
+    if project:
         where.append("i.project = ?"); params.append(project)
     if status in STATUS:
         where.append("i.status = ?"); params.append(status)
@@ -176,11 +177,11 @@ async def items_list(ctx: Ctx = Depends(get_ctx), project: str = "", status: str
 
 def _form_context(ctx: Ctx, item=None):
     return {
-        "item": item, "users": queries.active_users(ctx.conn), "FREQUENCIES": FREQUENCIES,
+        "item": item, "users": queries.active_users(ctx.conn), "user_projects": queries.user_projects_map(ctx.conn, ctx.visible_projects), "FREQUENCIES": FREQUENCIES,
         "owner_ids": [u["id"] for u in people(ctx.conn, item["id"], "owner")] if item else [ctx.user["id"]],
         "reporter_ids": [u["id"] for u in people(ctx.conn, item["id"], "reporter")] if item else [],
         "req_ids": [r["requirement_id"] for r in db.all_rows(ctx.conn, "SELECT requirement_id FROM key_item_requirements WHERE item_id = ?", (item["id"],))] if item else [],
-        "requirements": db.all_rows(ctx.conn, "SELECT id, name, project FROM requirements WHERE deleted_at IS NULL AND kind != 'v2' ORDER BY updated_at DESC LIMIT 300"),
+        "requirements": [r for r in db.all_rows(ctx.conn, "SELECT id, name, project FROM requirements WHERE deleted_at IS NULL AND kind != 'v2' ORDER BY updated_at DESC LIMIT 300") if ctx.can_view(r["project"])],
         "custom": _custom_fields(item["interval_hours"]) if item and item["frequency"] == "custom" else {"value": "", "unit": "days"},
     }
 
@@ -193,10 +194,27 @@ def _custom_fields(hours: int) -> dict:
     return {"value": hours, "unit": "hours"}
 
 
+def _require_any_edit(ctx: Ctx) -> None:
+    ctx.require_user()
+    if not ctx.editable_projects:
+        raise HTTPException(403, "你没有任何项目的编辑权限，不能新建重点事项，请联系管理员开通")
+
+
+def _set_people(conn, item_id: int, role: str, ids: list[int], project: str | None = None) -> None:
+    """负责人 / 汇报对象只能是对该项目至少可见的成员（管理员除外）。"""
+    allowed = {u["id"] for u in queries.users_for_project(conn, project)} if project else None
+    conn.execute("DELETE FROM key_item_people WHERE item_id = ? AND role = ?", (item_id, role))
+    for uid in dict.fromkeys(ids):
+        if allowed is not None and uid not in allowed:
+            continue
+        if db.one(conn, "SELECT 1 FROM users WHERE id = ? AND deleted_at IS NULL", (uid,)):
+            conn.execute("INSERT OR IGNORE INTO key_item_people(item_id, user_id, role) VALUES (?, ?, ?)", (item_id, uid, role))
+
+
 @router.get("/new")
 async def item_new_page(ctx: Ctx = Depends(get_ctx), project: str = ""):
-    ctx.require_user()
-    return ctx.render("items/form.html", mode="new", project=project, **_form_context(ctx))
+    _require_any_edit(ctx)
+    return ctx.render("items/form.html", mode="new", project=project if project in ctx.editable_projects else "", **_form_context(ctx))
 
 
 def _read_form(form) -> dict:
@@ -217,12 +235,15 @@ async def item_new(request: Request, ctx: Ctx = Depends(get_ctx)):
     form = await request.form()
     ctx.check_csrf(form)
     data = _read_form(form)
+    ctx.require_edit(data["project"])
     owners = queries.parse_ids(form, "owners") or [ctx.user["id"]]
     now = db.utcnow()
     item_id = db.insert(ctx.conn, "key_items", {**data, "status": "open", "created_by": ctx.user["id"], "created_at": now, "updated_by": ctx.user["id"], "updated_at": now, "last_progress_at": now, "next_remind_at": next_remind(now, data["interval_hours"])})
-    _set_people(ctx.conn, item_id, "owner", owners)
-    _set_people(ctx.conn, item_id, "reporter", queries.parse_ids(form, "reporters"))
-    _set_requirements(ctx.conn, item_id, queries.parse_ids(form, "requirements"))
+    _set_people(ctx.conn, item_id, "owner", owners, data["project"])
+    _set_people(ctx.conn, item_id, "reporter", queries.parse_ids(form, "reporters"), data["project"])
+    if not people(ctx.conn, item_id, "owner"):  # 指定的负责人都没有该项目权限 → 创建人兜底
+        _set_people(ctx.conn, item_id, "owner", [ctx.user["id"]], data["project"])
+    _set_requirements(ctx.conn, item_id, queries.parse_ids(form, "requirements"), ctx.visible_projects)
     uid = _log(ctx.conn, item_id, "create", "", ctx.user["id"])
     names = await _save_files(ctx, item_id, uid, form.getlist("files"))
     item = item_or_404(ctx.conn, item_id)
@@ -235,6 +256,7 @@ async def item_new(request: Request, ctx: Ctx = Depends(get_ctx)):
 async def item_edit_page(item_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_edit(item["project"])
     return ctx.render("items/form.html", mode="edit", project=item["project"], **_form_context(ctx, item))
 
 
@@ -244,7 +266,10 @@ async def item_edit(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     form = await request.form()
     ctx.check_csrf(form)
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_edit(item["project"])
     data = _read_form(form)
+    if data["project"] != item["project"]:
+        ctx.require_edit(data["project"])
     changes = []
     if data["interval_hours"] != item["interval_hours"]:
         changes.append(f"提醒频率 {freq_label(item['frequency'], item['interval_hours'])} → {freq_label(data['frequency'], data['interval_hours'])}")
@@ -256,9 +281,11 @@ async def item_edit(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
     if data["description"] != item["description"]:
         changes.append("修改了描述")
     db.update(ctx.conn, "key_items", item_id, {**data, "updated_by": ctx.user["id"], "updated_at": db.utcnow()})
-    _set_people(ctx.conn, item_id, "owner", queries.parse_ids(form, "owners") or [ctx.user["id"]])
-    _set_people(ctx.conn, item_id, "reporter", queries.parse_ids(form, "reporters"))
-    _set_requirements(ctx.conn, item_id, queries.parse_ids(form, "requirements"))
+    _set_people(ctx.conn, item_id, "owner", queries.parse_ids(form, "owners") or [ctx.user["id"]], data["project"])
+    _set_people(ctx.conn, item_id, "reporter", queries.parse_ids(form, "reporters"), data["project"])
+    if not people(ctx.conn, item_id, "owner"):
+        _set_people(ctx.conn, item_id, "owner", [ctx.user["id"]], data["project"])
+    _set_requirements(ctx.conn, item_id, queries.parse_ids(form, "requirements"), ctx.visible_projects)
     uid = _log(ctx.conn, item_id, "edit", "；".join(changes) or "修改了负责人/汇报对象/关联需求", ctx.user["id"])
     item = item_or_404(ctx.conn, item_id)
     _notify_item(ctx, item, f"【重点事项】{ctx.user['name']} 修改了「{item['title']}」", "；".join(changes), update_id=uid)
@@ -272,18 +299,19 @@ async def item_edit(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx))
 async def item_detail(item_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_view(item["project"])
     updates = db.all_rows(ctx.conn, "SELECT x.*, u.name AS author FROM key_item_updates x LEFT JOIN users u ON u.id = x.created_by WHERE x.item_id = ? ORDER BY x.id DESC", (item_id,))
     files = db.all_rows(ctx.conn, "SELECT f.*, u.name AS uploader FROM key_item_files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.item_id = ? AND f.deleted_at IS NULL ORDER BY f.id", (item_id,))
     files_by_update: dict = {}
     for f in files:
         files_by_update.setdefault(f["update_id"], []).append(f)
     reads = {u["id"]: read_status(ctx.conn, "item_update", u["id"]) for u in updates if u["kind"] in ("progress", "complete", "reopen", "edit", "create")}
-    reqs = db.all_rows(ctx.conn, "SELECT r.id, r.name, r.project FROM key_item_requirements k JOIN requirements r ON r.id = k.requirement_id WHERE k.item_id = ? AND r.deleted_at IS NULL", (item_id,))
+    reqs = [r for r in db.all_rows(ctx.conn, "SELECT r.id, r.name, r.project FROM key_item_requirements k JOIN requirements r ON r.id = k.requirement_id WHERE k.item_id = ? AND r.deleted_at IS NULL", (item_id,)) if ctx.can_view(r["project"])]
     return ctx.render(
         "items/detail.html", item=item, owners=people(ctx.conn, item_id, "owner"), reporters=people(ctx.conn, item_id, "reporter"), updates=updates, files_by_update=files_by_update,
         reads=reads, reqs=reqs, FREQUENCIES=FREQUENCIES, STATUS=STATUS, UPDATE_KINDS=UPDATE_KINDS, state=_due_state(item, db.utcnow()), freq=freq_label(item["frequency"], item["interval_hours"]),
         can_nudge=can_nudge(ctx, item, [u["id"] for u in people(ctx.conn, item_id, "owner")]), last_nudge=last_nudge_at(ctx.conn, item_id, ctx.user["id"]), nudge_cooldown=NUDGE_COOLDOWN_MINUTES,
-        can_delete=ctx.is_admin or item["created_by"] == ctx.user["id"], creator=queries.user_name(ctx.conn, item["created_by"]),
+        can_delete=(ctx.is_admin or item["created_by"] == ctx.user["id"]) and ctx.can_edit(item["project"]), editable=ctx.can_edit(item["project"]), creator=queries.user_name(ctx.conn, item["created_by"]),
     )
 
 
@@ -293,6 +321,7 @@ async def item_progress(item_id: int, request: Request, ctx: Ctx = Depends(get_c
     form = await request.form()
     ctx.check_csrf(form)
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_view(item["project"])  # 可见即可写进展（负责人 / 汇报对象常常只有可见权）
     body = str(form.get("body") or "").strip()
     uploads = [u for u in form.getlist("files") if isinstance(u, UploadFile) and u.filename]
     if not body and not uploads:
@@ -328,6 +357,7 @@ async def item_nudge(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx)
     form = await request.form()
     ctx.check_csrf(form)
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_view(item["project"])
     owners = people(ctx.conn, item_id, "owner")
     owner_ids = [u["id"] for u in owners]
     if item["status"] != "open":
@@ -348,7 +378,7 @@ async def item_nudge(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx)
     uid = _log(ctx.conn, item_id, "nudge", msg, ctx.user["id"])
     title = f"【催办】{ctx.user['name']} 催你更新「{item['title']}」的进展"
     body = (msg + "\n" if msg else "") + f"距上次进展已 {days} 天" + (f"；截止 {item['due_date']}" if item["due_date"] else "")
-    notify_users(ctx.conn, ctx.notifier, ctx.base_url, owner_ids, "item_nudge", title, body, f"/items/{item_id}", "item_update", uid, exclude=ctx.user["id"])
+    notify_users(ctx.conn, ctx.notifier, ctx.base_url, owner_ids, "item_nudge", title, body, f"/items/{item_id}", "item_update", uid, exclude=ctx.user["id"], project=item["project"])
     db.update(ctx.conn, "key_items", item_id, {"updated_at": db.utcnow(), "updated_by": ctx.user["id"]})
     ctx.flash("ok", f"已催办：{'、'.join(u['name'] for u in owners if u['id'] != ctx.user['id'])}")
     return ctx.redirect(f"/items/{item_id}")
@@ -360,6 +390,7 @@ async def item_status(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx
     form = await request.form()
     ctx.check_csrf(form)
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_edit(item["project"])
     done = str(form.get("status")) == "done"
     now = db.utcnow()
     if done:
@@ -381,6 +412,7 @@ async def item_delete(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx
     form = await request.form()
     ctx.check_csrf(form)
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_edit(item["project"])
     if not (ctx.is_admin or item["created_by"] == ctx.user["id"]):
         raise HTTPException(403, "只有创建人或管理员可以删除")
     db.update(ctx.conn, "key_items", item_id, {"deleted_at": db.utcnow(), "deleted_by": ctx.user["id"]})
@@ -392,7 +424,8 @@ async def item_delete(item_id: int, request: Request, ctx: Ctx = Depends(get_ctx
 @router.get("/{item_id}/files/{file_id}")
 async def item_file(item_id: int, file_id: int, ctx: Ctx = Depends(get_ctx)):
     ctx.require_user()
-    item_or_404(ctx.conn, item_id)
+    item = item_or_404(ctx.conn, item_id)
+    ctx.require_view(item["project"])
     f = db.one(ctx.conn, "SELECT * FROM key_item_files WHERE id = ? AND item_id = ? AND deleted_at IS NULL", (file_id, item_id))
     if not f:
         raise HTTPException(404, "附件不存在")
@@ -408,6 +441,7 @@ async def item_file_delete(item_id: int, file_id: int, request: Request, ctx: Ct
     form = await request.form()
     ctx.check_csrf(form)
     item = item_or_404(ctx.conn, item_id)
+    ctx.require_view(item["project"])
     f = db.one(ctx.conn, "SELECT * FROM key_item_files WHERE id = ? AND item_id = ? AND deleted_at IS NULL", (file_id, item_id))
     if not f:
         raise HTTPException(404, "附件不存在")
@@ -435,7 +469,7 @@ def run_reminders(cfg: Config, conn: sqlite3.Connection, notifier: Notifier, bas
             title = f"【重点事项提醒】「{item['title']}」已 {hours} 小时没有进展更新"
         body = f"负责人：{'、'.join(owners) or '—'}；提醒频率：{freq_label(item['frequency'], item['interval_hours'])}" + (f"；截止 {item['due_date']}" if item["due_date"] else "") + "。负责人更新进展后计时会重置。"
         uid = _log(conn, item["id"], "remind", f"系统提醒：已 {days} 天未更新", None)
-        notify_users(conn, notifier, base_url, people_ids(conn, item["id"]), "item_remind", title, body, f"/items/{item['id']}", "item_update", uid)
+        notify_users(conn, notifier, base_url, people_ids(conn, item["id"]), "item_remind", title, body, f"/items/{item['id']}", "item_update", uid, project=item["project"])
         db.update(conn, "key_items", item["id"], {"next_remind_at": next_remind(now, item["interval_hours"])})
         n += 1
     return n

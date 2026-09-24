@@ -204,12 +204,19 @@ def mark_bot_blocked(conn: sqlite3.Connection, tg_id: int) -> None:
 
 # ---------- 发通知 ----------
 
-def notify_user(conn: sqlite3.Connection, notifier: Notifier, base_url: str, user_id: int, kind: str, title: str, body: str = "", url: str = "", ref_type: str | None = None, ref_id: int | None = None) -> int | None:
-    """落库 + 推送。返回通知 id；用户关闭了该类型则不落库返回 None。"""
+def user_can_view_project(conn: sqlite3.Connection, user, project: str | None) -> bool:
+    if project is None or not user:
+        return True
+    from .queries import user_levels
+    return project in user_levels(conn, user)
+
+
+def notify_user(conn: sqlite3.Connection, notifier: Notifier, base_url: str, user_id: int, kind: str, title: str, body: str = "", url: str = "", ref_type: str | None = None, ref_id: int | None = None, project: str | None = None) -> int | None:
+    """落库 + 推送。返回通知 id；用户关闭了该类型、或对 project 无权限则不落库返回 None。"""
     if kind not in KINDS or not pref_enabled(conn, user_id, kind):
         return None
     user = db.one(conn, "SELECT * FROM users WHERE id = ? AND deleted_at IS NULL", (user_id,))
-    if not user:
+    if not user or not user_can_view_project(conn, user, project):
         return None
     settings = db.get_settings(conn)
     defer = quiet_until(settings)
@@ -278,12 +285,12 @@ def _db_path_of(conn: sqlite3.Connection) -> str | None:
     return None
 
 
-def notify_users(conn, notifier, base_url, user_ids, kind, title, body="", url="", ref_type=None, ref_id=None, exclude: int | None = None) -> int:
+def notify_users(conn, notifier, base_url, user_ids, kind, title, body="", url="", ref_type=None, ref_id=None, exclude: int | None = None, project: str | None = None) -> int:
     n = 0
     for uid in dict.fromkeys(user_ids):
         if uid == exclude or not uid:
             continue
-        if notify_user(conn, notifier, base_url, uid, kind, title, body, url, ref_type, ref_id):
+        if notify_user(conn, notifier, base_url, uid, kind, title, body, url, ref_type, ref_id, project):
             n += 1
     return n
 
@@ -312,11 +319,11 @@ def notify_doc_event(conn, notifier, base_url, req, doc, event: str, title: str,
     stake = doc_stakeholders(conn, req["id"], doc["id"])
     sent = set()
     for uid in stake:
-        if uid != actor_id and notify_user(conn, notifier, base_url, uid, f"doc_{event}", title, body, url, "requirement", req["id"]):
+        if uid != actor_id and notify_user(conn, notifier, base_url, uid, f"doc_{event}", title, body, url, "requirement", req["id"], project=req["project"]):
             sent.add(uid)
     for uid in fav_users(conn, req["id"]):
         if uid != actor_id and uid not in sent and uid not in stake:
-            notify_user(conn, notifier, base_url, uid, f"fav_{event}", title, body, url, "requirement", req["id"])
+            notify_user(conn, notifier, base_url, uid, f"fav_{event}", title, body, url, "requirement", req["id"], project=req["project"])
 
 
 # ---------- 已读 ----------

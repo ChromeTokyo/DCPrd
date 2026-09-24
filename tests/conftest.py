@@ -142,3 +142,19 @@ def superuser(client):
     r = login(client, 1001, "Super")
     assert r.status_code == 302
     return client
+
+
+def user_id_by_name(admin, name: str) -> int:
+    m = re.search(rf'{re.escape(name)}</span>.*?/admin/users/(\d+)/', admin.get("/admin/users").text, re.S)
+    assert m, f"user {name} not found on users page"
+    return int(m.group(1))
+
+
+def grant(admin, user_id: int, level: str = "edit", projects=None) -> None:
+    """管理员给普通用户设置项目权限；默认四个项目全部可编辑（模拟迁移后老成员的状态）。"""
+    from app.web import PROJECTS
+    data = {"csrf": csrf_of(admin, "/admin/users")}
+    for p in PROJECTS:
+        data[f"perm_{p}"] = level if (projects is None or p in projects) else "none"
+    r = admin.post(f"/admin/users/{user_id}/perms", data=data, follow_redirects=False)
+    assert r.status_code == 303, r.text[:300]
