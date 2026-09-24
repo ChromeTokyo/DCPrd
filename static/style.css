@@ -31,7 +31,7 @@ h3{font-size:15px;margin:0 0 12px}
 .btn-danger{color:var(--danger);border-color:#fca5a5}.btn-danger:hover{background:#fef2f2}
 .btn-link{border:none;background:none;color:var(--primary);padding:0}
 .btn.copied{background:#ecfdf5;border-color:#6ee7b7;color:var(--ok)}
-.tag{display:inline-block;font-size:11px;line-height:1;padding:4px 6px;border-radius:4px;color:#fff;font-weight:600;vertical-align:middle}
+.tag{display:inline-block;font-size:11px;line-height:1;padding:4px 6px;border-radius:4px;color:#fff;font-weight:600;vertical-align:middle;white-space:nowrap}
 .tag-eb{background:var(--eb)}.tag-im{background:var(--im)}.tag-site{background:var(--site)}.tag-tk{background:var(--tk)}
 .tag-kind{background:#e0e7ff;color:#3730a3;font-weight:500}.tag-single{background:#f1f5f9;color:#475569}
 .tag-warn{background:#fef3c7;color:#92400e;font-weight:500}
@@ -199,7 +199,9 @@ select[multiple]{max-width:560px;width:100%}
 /* 项目权限 */
 .table.users td{vertical-align:middle}
 .table.users .st{white-space:nowrap}
-.pchips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;max-width:300px}
+.pchips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.perm-cell{min-width:300px}
+.table.users td:nth-child(2){white-space:nowrap}
 .pchip{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:#f3f4f6;border-radius:999px;padding:2px 8px 2px 3px;color:#374151;white-space:nowrap}
 .pchip .tag{min-width:30px;text-align:center}
 .pchip.lv-none{color:#9ca3af;background:#f9fafb}.pchip.lv-none .tag{opacity:.45}
