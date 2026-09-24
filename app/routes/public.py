@@ -138,7 +138,7 @@ def _render_viewer(ctx: Ctx, doc, ver, path: Path, cache: str, widget: dict | No
         cls = "view-image"
     page = (
         '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{name}</title>" '<link rel="stylesheet" href="/static/viewer.css"></head>'
+        f"<title>{name}</title>" f'<link rel="stylesheet" href="/static/viewer.css?v={ctx.cfg.app_version}"></head>'
         f'<body class="{cls}"><main>{inner}</main></body></html>'
     ).encode("utf-8")
     if widget is not None:

@@ -202,13 +202,13 @@ async def preview_upload(request: Request, ctx: Ctx = Depends(get_ctx)):
             return HTMLResponse(raw, headers={"content-security-policy": "sandbox allow-scripts allow-popups allow-forms"})
         if kind == "md":
             body = markdown.markdown(tmp.read_text("utf-8", errors="replace"), extensions=["extra", "tables", "fenced_code", "sane_lists", "toc", "nl2br"], output_format="html5")
-            return HTMLResponse(f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css"></head><body class="view-md"><main><article class="md">{body}</article></main></body></html>')
+            return HTMLResponse(f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css?v={ctx.cfg.app_version}"></head><body class="view-md"><main><article class="md">{body}</article></main></body></html>')
         if kind == "image":
             import base64
             import mimetypes
             mime = mimetypes.guess_type(filename)[0] or "image/png"
             data = base64.b64encode(tmp.read_bytes()).decode()
-            return HTMLResponse(f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css"></head><body class="view-image"><main><figure class="pic"><img src="data:{mime};base64,{data}" alt=""></figure></main></body></html>')
+            return HTMLResponse(f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css?v={ctx.cfg.app_version}"></head><body class="view-image"><main><figure class="pic"><img src="data:{mime};base64,{data}" alt=""></figure></main></body></html>')
         # zip：解到临时目录，给出文件清单与入口判定
         with tempfile.TemporaryDirectory(dir=ctx.cfg.tmp_dir) as d:
             try:
@@ -229,7 +229,7 @@ async def preview_upload(request: Request, ctx: Ctx = Depends(get_ctx)):
             more = f"<p class='muted'>仅显示前 500 个，共 {len(files)} 个文件</p>" if len(files) > 500 else ""
             verdict = f"入口文件：<code>{html_mod.escape(entry)}</code>" if entry else f"无法自动判定入口，上传后需在 {len(res.html_paths)} 个 html 中选择"
             return HTMLResponse(
-                f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css">'
+                f'<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="{ctx.base_url}/static/viewer.css?v={ctx.cfg.app_version}">'
                 '<style>ul{font:13px ui-monospace,Menlo,monospace;columns:2;padding-left:20px}li.entry{font-weight:700;color:#2563eb}.sum{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:12px}</style></head>'
                 f'<body><main><div class="sum"><strong>{html_mod.escape(filename)}</strong> · {size // 1024} KB · 解压 {res.file_count} 个文件（{res.total_bytes // 1024} KB）<br>{verdict}</div>{warn}<ul>{items}</ul>{more}</main></body></html>'
             )

@@ -197,9 +197,13 @@ select[multiple]{max-width:560px;width:100%}
 .pd-note{margin-top:6px;background:#fffbeb;border-left:3px solid #f59e0b;padding:4px 10px;border-radius:0 4px 4px 0;white-space:pre-wrap;color:#78350f;font-size:13px}
 
 /* 项目权限 */
-.perm-form{display:flex;flex-direction:column;gap:4px;min-width:150px}
-.perm-row{display:flex;align-items:center;gap:6px;font-weight:normal!important}
-.perm-row select{padding:2px 6px;font-size:12px;max-width:110px}
+.perm-form{display:grid;grid-template-columns:auto auto;gap:4px 8px;align-items:center;justify-content:start}
+.perm-form .btn{grid-column:1 / -1;justify-self:start;margin-top:2px}
+.perm-row{display:contents;font-weight:normal!important}
+.perm-row .tag{min-width:36px;text-align:center}
+.perm-row select{padding:2px 6px;font-size:12px;width:96px;max-width:96px;line-height:1.3}
+.table.users td{vertical-align:middle}
+.table.users .st{white-space:nowrap}
 .perm-row select.perm-none{color:#9ca3af}.perm-row select.perm-view{color:#1e40af}.perm-row select.perm-edit{color:#166534;font-weight:600}
 .tabs a .ro{font-size:11px;opacity:.8}
 .people-picker label.hide{display:none}

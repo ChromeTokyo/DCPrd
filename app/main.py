@@ -62,6 +62,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     return HTMLResponse(f"<h1>413</h1><p>上传内容超过上限（{limit // (1024 * 1024)} MB）。</p>", status_code=413)
         response = await call_next(request)
         path = request.url.path
+        if path.startswith("/static/"):
+            response.headers["cache-control"] = "public, max-age=31536000, immutable" if request.query_params.get("v") else "no-cache"
         if not (path.startswith("/s/") or path.startswith("/v/") or path.startswith("/p2/") or path.startswith("/v2/content/")):
             response.headers.setdefault("X-Frame-Options", "DENY")
             response.headers.setdefault("Referrer-Policy", "same-origin")
@@ -78,7 +80,7 @@ def _error_page(request: Request, status: int, message: str) -> HTMLResponse:
     cfg = request.app.state.cfg
     titles = {403: "没有权限", 404: "页面不存在", 413: "文件过大", 400: "请求有误"}
     body = env.get_template("error.html").render(
-        status=status, title=titles.get(status, "出错了"), message=message, site_name=cfg.site_name, user=None, base_url=cfg.base_url
+        status=status, title=titles.get(status, "出错了"), message=message, site_name=cfg.site_name, user=None, base_url=cfg.base_url, static_v=cfg.app_version
     )
     return HTMLResponse(body, status_code=status)
 

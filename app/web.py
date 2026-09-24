@@ -318,6 +318,7 @@ class Ctx:
             can_edit=self.can_edit,
             can_view=self.can_view,
             PERM_LEVELS=PERM_LEVELS,
+            static_v=self.cfg.app_version,
         )
         body = env.get_template(template).render(**context)
         resp = HTMLResponse(body, status_code=status_code)

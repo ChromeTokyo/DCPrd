@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ page.title }} · {{ req.name }}</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/v2.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ page.title }} · {{ req.name }}</title><link rel="stylesheet" href="/static/style.css?v={{ static_v }}"><link rel="stylesheet" href="/static/v2.css?v={{ static_v }}"></head>
 <body class="public-page">
 <main class="wrap v2">
   <p class="crumbs"><a href="/p2/{{ req.share_code }}/">{{ req.name }}</a> › {{ page.title }}</p>
@@ -9,6 +9,6 @@
     {% include "v2/_viewer.html" %}
   {% endwith %}
 </main>
-<script src="/static/v2.js"></script>
+<script src="/static/v2.js?v={{ static_v }}"></script>
 </body>
 </html>

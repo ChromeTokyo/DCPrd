@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block head %}<link rel="stylesheet" href="/static/v2.css">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/v2.css?v={{ static_v }}">{% endblock %}
 {% block nav %}
 {% if user %}
 <header class="topbar v2bar">
