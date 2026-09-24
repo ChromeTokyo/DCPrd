@@ -197,13 +197,24 @@ select[multiple]{max-width:560px;width:100%}
 .pd-note{margin-top:6px;background:#fffbeb;border-left:3px solid #f59e0b;padding:4px 10px;border-radius:0 4px 4px 0;white-space:pre-wrap;color:#78350f;font-size:13px}
 
 /* 项目权限 */
-.perm-form{display:grid;grid-template-columns:auto auto;gap:4px 8px;align-items:center;justify-content:start}
-.perm-form .btn{grid-column:1 / -1;justify-self:start;margin-top:2px}
-.perm-row{display:contents;font-weight:normal!important}
-.perm-row .tag{min-width:36px;text-align:center}
-.perm-row select{padding:2px 6px;font-size:12px;width:96px;max-width:96px;line-height:1.3}
 .table.users td{vertical-align:middle}
 .table.users .st{white-space:nowrap}
+.pchips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;max-width:300px}
+.pchip{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:#f3f4f6;border-radius:999px;padding:2px 8px 2px 3px;color:#374151;white-space:nowrap}
+.pchip .tag{min-width:30px;text-align:center}
+.pchip.lv-none{color:#9ca3af;background:#f9fafb}.pchip.lv-none .tag{opacity:.45}
+.pchip.lv-edit{background:#dcfce7;color:#166534}.pchip.lv-view{background:#dbeafe;color:#1e40af}
+.perm-line{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.perm-line .tag{min-width:36px;text-align:center}
+.seg{display:inline-flex;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;background:#fff}
+.seg label{margin:0;cursor:pointer}
+.seg label+label{border-left:1px solid #d1d5db}
+.seg input{display:none}
+.seg span{display:block;padding:5px 14px;font-size:13px;color:#374151;user-select:none}
+.seg label:has(input:checked) span{background:#111827;color:#fff}
+.seg label:has(input[value=view]:checked) span{background:#2563eb}
+.seg label:has(input[value=edit]:checked) span{background:#16a34a}
+.invite-cell .invite{display:inline-block;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .perm-row select.perm-none{color:#9ca3af}.perm-row select.perm-view{color:#1e40af}.perm-row select.perm-edit{color:#166534;font-weight:600}
 .tabs a .ro{font-size:11px;opacity:.8}
 .people-picker label.hide{display:none}

@@ -119,3 +119,15 @@
   radios.forEach(function (r) { r.addEventListener('change', apply); });
   apply();
 })();
+
+// 通用弹窗：[data-open="#id"] 打开，[data-close] / 点遮罩 / Esc 关闭
+(function () {
+  document.addEventListener('click', function (e) {
+    var o = e.target.closest('[data-open]');
+    if (o) { var m = document.querySelector(o.getAttribute('data-open')); if (m) { m.hidden = false; var f = m.querySelector('input:checked, input, button'); } return; }
+    var c = e.target.closest('[data-close]');
+    if (c) { var mm = c.closest('.modal'); if (mm) mm.hidden = true; return; }
+    if (e.target.classList && e.target.classList.contains('modal') && e.target.id && e.target.id.indexOf('perm-modal-') === 0) e.target.hidden = true;
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.modal[id^=perm-modal-]:not([hidden])').forEach(function (m) { m.hidden = true; }); });
+})();

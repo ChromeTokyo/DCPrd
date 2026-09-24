@@ -86,11 +86,17 @@ def test_full_flow(browser, live_url):
     admin.goto(f"{base_url}/admin/users")
     assert admin.locator("text=设为管理员").count() == 1
     row = admin.locator("tr", has_text="张三")
-    row.locator("select[name=perm_eb]").select_option("edit")
-    row.locator("select[name=perm_im]").select_option("view")
-    row.locator("button:has-text('保存权限')").click()
+    assert "—" in row.locator(".pchips").inner_text()  # 摘要：全部无权限
+    row.locator("button:has-text('设置权限')").click()
+    modal = row.locator(".modal:not([hidden])")
+    assert modal.is_visible()
+    modal.locator("label:has(input[name=perm_eb][value=edit])").click()
+    modal.locator("label:has(input[name=perm_im][value=view])").click()
+    modal.locator("button:has-text('保存')").click()
     admin.wait_for_url(f"{base_url}/admin/users")
     assert "项目权限已保存" in admin.locator("#flash").inner_text()
+    chips = re.sub(r"\s+", "", admin.locator("tr", has_text="张三").locator(".pchips").inner_text())
+    assert "EB编辑" in chips and "IM可见" in chips and "TK—" in chips
     user.goto(f"{base_url}/")
     assert "还没有任何项目的访问权限" not in user.content()
     assert user.locator(".tabs a", has_text="EB").count() == 1 and user.locator(".tabs a", has_text="TK").count() == 0
